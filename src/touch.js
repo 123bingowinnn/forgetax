@@ -40,7 +40,7 @@ export function initTouch(api) {
     <div id="tzMove"></div><div id="tzLook"></div>
     <div id="tJoy" class="hidden"><div class="knob"></div></div>
     <div id="tTop">
-      <button class="tb sm" id="tbSkip">跳过引导</button>
+      <button class="tb sm" id="tbSkip">跳过</button>
       <button class="tb sm" id="tbRelic">遗物</button>
       <button class="tb sm" id="tbCodex">图鉴</button>
       <button class="tb sm" id="tbMenu">☰</button>
@@ -86,7 +86,7 @@ export function initTouch(api) {
     api.resumeAudio();
     if (api.phase() !== 'play' || joyId !== null) return;
     joyId = e.pointerId; jx = e.clientX; jy = e.clientY;
-    zMove.setPointerCapture(e.pointerId);
+    try { zMove.setPointerCapture(e.pointerId); } catch (_) { }
     joy.style.left = jx + 'px'; joy.style.top = jy + 'px';
     joy.style.width = joy.style.height = R() * 2 + 'px';
     joy.classList.remove('hidden');
@@ -117,7 +117,7 @@ export function initTouch(api) {
     const ph = api.phase();
     if (ph === 'anvil') { api.hammer(); return; }   // 铁砧前：点哪里都是敲
     if (ph !== 'play') return;
-    zone.setPointerCapture(e.pointerId);
+    try { zone.setPointerCapture(e.pointerId); } catch (_) { }
     looks.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, t: performance.now(), moved: 0 });
   };
   const onLookMove = e => {

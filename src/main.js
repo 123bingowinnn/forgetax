@@ -200,7 +200,7 @@ function iconOf(kind, id) {
 function toast(msg, err) {
   const el = document.createElement('div');
   el.className = 'toast' + (err ? ' err' : '');
-  el.textContent = msg;
+  el.textContent = touchText(msg);
   $('#toasts').appendChild(el);
   setTimeout(() => el.remove(), 2700);
   if (err) SFX.error();
@@ -209,7 +209,7 @@ function toast(msg, err) {
 let subT = null;
 function subtitle(text, ms = 2600) {
   const el = $('#subtitle');
-  el.textContent = text; el.classList.add('show');
+  el.textContent = touchText(text); el.classList.add('show');
   clearTimeout(subT); subT = setTimeout(() => el.classList.remove('show'), ms);
 }
 
@@ -296,12 +296,13 @@ function updateConsBar() {
   if (phase !== 'anvil' || !ids.length) { el.classList.add('hidden'); return; }
   if (selCons >= ids.length) selCons = 0;
   const cur = D.CONS_MAP[ids[selCons]];
-  el.innerHTML = `<div class="c-desc"><b>消耗品</b>${esc(cur.name)} · ${esc(cur.desc.replace(/^按 Q 使用：/, ''))}</div>
+  el.innerHTML = touchText(`<div class="c-desc"><b>消耗品</b>${esc(cur.name)} · ${esc(cur.desc.replace(/^按 Q 使用：/, ''))}</div>
     <div class="c-help">数字键选择 · Q 使用${st.consumables.rewind ? ' · R 撤销上一锤' : ''}</div>
     <div class="slots">${ids.map((id, i) => {
       const on = !!st.active[id];
       return `<div class="slot ${i === selCons ? 'sel' : ''} ${on ? 'on' : ''}"><span class="n">${i + 1}</span><img src="${iconOf('cons', id)}"><span class="x">×${st.consumables[id]}</span><span class="nm">${esc(D.CONS_MAP[id].name)}</span></div>`;
-    }).join('')}</div>`;
+    }).join('')}</div>`);
+  el.querySelectorAll('.slot').forEach((sl, i) => { sl.onpointerdown = e => { e.stopPropagation(); if (selCons === i) useCons(); else { selCons = i; updateConsBar(); } }; });
   el.classList.remove('hidden');
 }
 
@@ -400,12 +401,26 @@ function syncSwords() {
   }
 }
 
+/* 竖屏 / 小屏时，在屏幕上方显示一个简版锻造面板（场景里的木牌太小看不清） */
+function drawMiniPanel(vm) {
+  const el = $('#miniPanel');
+  if (!el) return;
+  const need = IS_TOUCH && phase === 'anvil' && (innerWidth < innerHeight * 1.2 || innerWidth < 700);
+  el.classList.toggle('hidden', !need);
+  if (!need) return;
+  const last = vm.last ? `<span style="color:${D.OUTCOMES[vm.last.outcome].color}">${D.OUTCOMES[vm.last.outcome].name} · ${vm.last.ratio >= 10 ? vm.last.ratio.toFixed(0) : vm.last.ratio.toFixed(2).replace(/\.?0+$/, '')}倍</span>` : '';
+  const pips = vm.frenzy !== null ? `<b class="fz">入神 ${vm.frenzy.toFixed(1)}s</b>` : Array.from({ length: 10 }, (_, i) => `<i class="${i < vm.charge ? 'on' : ''}"></i>`).join('');
+  el.innerHTML = `<div class="mp-top"><span class="mp-n">${esc(vm.name)}</span><span class="mp-l">+${vm.level}</span></div>
+    <div class="mp-mid"><span class="mp-v">${fmt(vm.value)} G</span><span class="mp-last">${last}</span><span class="mp-pips">${pips}</span></div>
+    <div class="mp-p">${D.OUTCOME_ORDER.map(k => `<div style="border-color:${D.OUTCOMES[k].color}"><small style="color:${D.OUTCOMES[k].color}">${D.OUTCOMES[k].name}</small>${(vm.probs[k] * 100).toFixed(1)}%</div>`).join('')}</div>`;
+}
+
 /* ======================= 场景物件同步（面板、日历、售货机、商人、遗物架） ======================= */
 function syncBoards() {
   if (!st) return;
   // 锻造面板
   const s = G.anvilSword(st);
-  if (!s) W.panel.draw({ empty: true });
+  if (!s) { W.panel.draw({ empty: true }); $('#miniPanel') && $('#miniPanel').classList.add('hidden'); }
   else {
     const fr = G.isFrenzyFor(st, s);
     const lr = st.lastResult && st.lastResult.swordId === s.id ? st.lastResult : null;
@@ -417,6 +432,11 @@ function syncBoards() {
     if (st.undoSnap && st.consumables.rewind) tags.push('R 可撤销');
     if (!s.heated) tags.push('剑是冷的');
     const maxT = G.frenzyDuration(st);
+    drawMiniPanel({
+      name: G.swordName(s), level: s.level, value: G.value(st, s),
+      last: lr ? { outcome: lr.outcome, ratio: lr.ratio } : null, charge: s.charge,
+      frenzy: fr ? Math.max(0, st.frenzy.timeLeft) : null, probs: G.probs(st, s),
+    });
     W.panel.draw({
       name: G.swordName(s), level: s.level, value: G.value(st, s),
       last: lr ? { outcome: lr.outcome, levelDelta: lr.levelDelta, delta: lr.delta, ratio: lr.ratio } : null,
@@ -515,8 +535,9 @@ function syncGhost() {
 
 /* ======================= 交互 ======================= */
 const center = new THREE.Vector2(0, 0);
-function findTarget() {
-  raycaster.setFromCamera(center, camera);
+function findTarget(ndc = center) {
+  camera.updateMatrixWorld();
+  raycaster.setFromCamera(ndc, camera);
   const hits = raycaster.intersectObjects(scene.children, true);
   for (const h of hits) {
     let o = h.object;
@@ -622,7 +643,7 @@ function updatePrompt() {
   if (!info) { el.classList.add('hidden'); lastPromptKey = ''; return; }
   const key = info.title + '|' + (info.sub || '') + '|' + JSON.stringify(info.act || []);
   if (key !== lastPromptKey) {
-    el.innerHTML = `<div class="p-title">${info.title}</div>${info.sub ? `<div class="p-sub">${info.sub}</div>` : ''}${info.act && info.act.length ? `<div class="p-act">${info.act.map(([k, t]) => keyHtml(k) + `<span>${t}</span>`).join('')}</div>` : ''}`;
+    el.innerHTML = touchText(`<div class="p-title">${info.title}</div>${info.sub ? `<div class="p-sub">${info.sub}</div>` : ''}${info.act && info.act.length && !IS_TOUCH ? `<div class="p-act">${info.act.map(([k, t]) => keyHtml(k) + `<span>${t}</span>`).join('')}</div>` : ''}`);
     lastPromptKey = key;
   }
   el.classList.remove('hidden');
@@ -630,6 +651,7 @@ function updatePrompt() {
 }
 
 function changed() {
+  if (phase !== 'anvil' && $('#miniPanel')) $('#miniPanel').classList.add('hidden');
   syncSwords();
   syncBoards();
   updateGold();
@@ -1015,7 +1037,7 @@ function showTutStep() {
   const s = tutStep();
   const box = $('#tutorial');
   if (!s) { box.classList.add('hidden'); tutMarker.visible = false; return; }
-  box.innerHTML = `<div class="tu-who">巨龙</div><div class="tu-say">“${esc(s.say)}”</div><div class="tu-hint">▸ ${esc(s.hint)}</div><div class="tu-skip">${tut.i + 1}/${D.TUTORIAL.length} · P 跳过引导</div>`;
+  box.innerHTML = touchText(`<div class="tu-who">巨龙</div><div class="tu-say">“${esc(s.say)}”</div><div class="tu-hint">▸ ${esc(s.hint)}</div><div class="tu-skip">${tut.i + 1}/${D.TUTORIAL.length} · P 跳过引导</div>`);
   box.classList.remove('hidden');
   box.style.animation = 'none'; void box.offsetWidth; box.style.animation = '';
   SFX.roar && tut.i === 0 && setTimeout(() => SFX.click(), 10);
@@ -1170,7 +1192,7 @@ function victory() {
 function openModal(html, bind, cls = '', dismissable = true) {
   const m = $('#modal'), box = m.querySelector('.m-box');
   box.className = 'm-box ' + cls;
-  box.innerHTML = html;
+  box.innerHTML = touchText(html);
   m.classList.remove('hidden');
   player.exitLock();
   box.querySelectorAll('[data-close]').forEach(b => b.onclick = closeModal);
@@ -1183,7 +1205,7 @@ function closeModal() {
   if (phase === 'play' || phase === 'anvil') showResume();
   setTimeout(showAch, 200);
 }
-function showResume() { if (!player.locked && (phase === 'play' || phase === 'anvil')) $('#resume').classList.remove('hidden'); }
+function showResume() { if (IS_TOUCH) return; if (!player.locked && (phase === 'play' || phase === 'anvil')) $('#resume').classList.remove('hidden'); }
 
 function showHelp() {
   openModal(`<h2>玩法说明</h2><div class="help">
@@ -1191,8 +1213,9 @@ function showHelp() {
     <h3>一天的流程</h3>
     <p>① 每天早上送来 3 把剑（剑架）→ ② 拿去熔炉加热（每把剑只需一次）→ ③ 放上铁砧锻造 → ④ 把够数的剑放上贡台 → ⑤ 敲铃结束一天。<br>没献上的剑会留到明天。献上的剑无论是否足额，价值都会化作金币返还。</p>
     <h3>操作</h3>
-    <p><span class="key">W A S D</span> 移动 · 鼠标环顾 · <span class="key">E</span> 交互 · <span class="key">X</span> 丢弃对准的遗物 · <span class="key">Tab</span> 遗物 · <span class="key">C</span> 图鉴/成就 · <span class="key">Esc</span> 暂停<br>
-    铁砧前：<b>左键</b> 敲击 · <b>右键</b> 把剑留在铁砧上离开 · <span class="key">E</span> 拿着剑离开 · <span class="key">1-9</span> 选消耗品 · <span class="key">Q</span> 使用 · <span class="key">R</span> 悔恨发条撤销</p>
+    ${IS_TOUCH ? `<p>左半屏按住拖动 = 移动摇杆 · 右半屏拖动 = 转视角 · <b>点一下物体</b> 或对准后点右下角「交互」= 拿起/放下/加热/投剑/购买/敲铃<br>
+    铁砧前：<b>点屏幕任意处</b>敲击（入神时狂点）· 「放下离开」「拿剑离开」「道具」「撤销」按钮 · 右上角「遗物」「图鉴」「☰」菜单（画质、全屏）</p>` : `<p><span class="key">W A S D</span> 移动 · 鼠标环顾 · <span class="key">E</span> 交互 · <span class="key">X</span> 丢弃对准的遗物 · <span class="key">Tab</span> 遗物 · <span class="key">C</span> 图鉴/成就 · <span class="key">Esc</span> 暂停<br>
+    铁砧前：<b>左键</b> 敲击 · <b>右键</b> 把剑留在铁砧上离开 · <span class="key">E</span> 拿着剑离开 · <span class="key">1-9</span> 选消耗品 · <span class="key">Q</span> 使用 · <span class="key">R</span> 悔恨发条撤销</p>`}
     <h3>每一锤：从 1000 张签里抽一张</h3>
     <table><tr><th style="color:var(--break)">破坏</th><td>剑被毁。+0 不会碎；+5 时 29.7%，+10 时 46.7%，最高 72%。</td></tr>
     <tr><th style="color:var(--damage)">损伤</th><td>-1 级（最低 +0），外形不会变回去。</td></tr>
@@ -1211,6 +1234,7 @@ function toggleRelicList(show) {
   el.innerHTML = `<h2>遗物 ${st.relics.length}/${D.RELIC_SLOTS}</h2><div class="grid">${st.relics.map(id => { const r = D.RELIC_MAP[id]; return `<div class="r"><img src="${iconOf('relic', id)}"><div><b style="color:${D.RARITY[r.rarity].color}">${esc(r.name)}</b><span>${esc(r.desc)}</span></div></div>`; }).join('') || '<div style="grid-column:span 4;text-align:center;opacity:.6">还没有遗物。用剑去售货机换吧。</div>'}</div>
     <div class="info">${D.dateStr(st.day)}（第 ${st.day} 天）· 今日贡额 ${fmt(G.quota(st))} G · 怒气 ${st.rage}/${D.RAGE_MAX} · 剑币 ${st.vend.credits} · 消耗品 ${Object.entries(st.consumables).map(([k, v]) => D.CONS_MAP[k].name + '×' + v).join('、') || '无'}</div>`;
   el.classList.remove('hidden');
+  el.onpointerdown = () => toggleRelicList(false);
 }
 
 /* ======================= 开局 / 标题 ======================= */
@@ -1278,6 +1302,7 @@ function showTitle() {
 /* ======================= 输入 ======================= */
 canvas.addEventListener('mousedown', e => {
   SFX.resume();
+  if (IS_TOUCH) return;
   if (phase === 'anvil') {
     if (e.button === 0) { if (hammerAnim && hammerAnim.phase === 'up') queuedHit = true; else doHammer(); }
     else if (e.button === 2) leaveAnvil(false);
@@ -1330,6 +1355,67 @@ $('#btnContinue').onclick = () => { SFX.resume(); continueRun(); };
 $('#btnHow').onclick = () => { SFX.resume(); showHelp(); };
 $('#btnCodex') && ($('#btnCodex').onclick = () => { SFX.resume(); showCodex(); });
 
+/* ======================= 触屏 ======================= */
+function tapAt(x, y) {
+  const ndc = new THREE.Vector2(x / innerWidth * 2 - 1, -(y / innerHeight) * 2 + 1);
+  const t = findTarget(ndc);
+  const info = describe(t);
+  if (info && info.fn) { target = t; t.info = info; info.fn(); lastPromptKey = ''; }
+  else if (info) { const el = $('#prompt'); el.innerHTML = touchText(`<div class="p-title">${info.title}</div>${info.sub ? `<div class="p-sub">${info.sub}</div>` : ''}`); el.classList.remove('hidden'); }
+}
+function hammerTap() {
+  if (phase !== 'anvil') return;
+  if (hammerAnim && hammerAnim.phase === 'up') queuedHit = true; else doHammer();
+}
+function showMenu() {
+  const fs = document.fullscreenEnabled || document.webkitFullscreenEnabled;
+  openModal(`<h2>暂停</h2><div class="sub">${st ? D.dateStr(st.day) + ' · 今日贡额 ' + fmt(G.quota(st)) + ' G · 怒气 ' + st.rage + '/' + D.RAGE_MAX : ''}</div>
+    <div class="menu-col">
+      <button class="btn primary" data-close>继续</button>
+      ${fs ? '<button class="btn" id="mFull">全屏</button>' : ''}
+      <div class="q-row"><span>画质</span>${['low', 'mid', 'high'].map(k => `<button class="btn ${k === qualityKey ? 'primary' : ''}" data-q="${k}">${{ low: '流畅', mid: '均衡', high: '精美' }[k]}</button>`).join('')}</div>
+      <button class="btn" id="mMute">${meta.muted ? '开启音效' : '关闭音效'}</button>
+      <button class="btn" id="mHelp">玩法说明</button>
+      <button class="btn" id="mTitle">保存并返回标题</button>
+    </div>`, box => {
+    const f = box.querySelector('#mFull');
+    if (f) f.onclick = () => { const el = document.documentElement; (el.requestFullscreen || el.webkitRequestFullscreen).call(el)?.catch?.(() => {}); closeModal(); };
+    box.querySelectorAll('[data-q]').forEach(b => b.onclick = () => { meta.quality = b.dataset.q; saveMeta(); applyQuality(b.dataset.q); showMenu(); });
+    box.querySelector('#mMute').onclick = () => { meta.muted = !meta.muted; SFX.enabled = !meta.muted; saveMeta(); showMenu(); };
+    box.querySelector('#mHelp').onclick = () => showHelp();
+    box.querySelector('#mTitle').onclick = () => { closeModal(); save(); showTitle(); };
+  });
+}
+const touchUI = initTouch({
+  phase: () => phase, modalOpen: () => !$('#modal').classList.contains('hidden') || !$('#relicList').classList.contains('hidden'),
+  player, tapAt,
+  act: () => { if (phase === 'play' && target && target.info && target.info.fn) target.info.fn(); },
+  actX: () => { if (phase === 'play' && target && target.info && target.info.fnX) target.info.fnX(); },
+  actInfo: () => (target && target.info) ? { label: target.info.act && target.info.act[0] && target.info.act[0][1], x: !!target.info.fnX } : null,
+  hammer: hammerTap, leave: () => leaveAnvil(false), take: () => leaveAnvil(true), useCons: () => useCons(), undo: () => doUndo(),
+  hasCons: () => !!(st && Object.keys(st.consumables).length), canUndo: () => !!(st && st.consumables.rewind),
+  relics: () => { if (st) toggleRelicList(true); }, codex: () => showCodex(), menu: () => showMenu(),
+  skipTut: () => { if (tut) { endTutorial(); toast('已跳过新手引导'); } }, hasTut: () => !!tut,
+  resumeAudio: () => SFX.resume(),
+});
+document.addEventListener('pointerdown', () => SFX.resume(), { passive: true });
+document.addEventListener('keydown', e => { if (e.code === 'Escape' && phase !== 'title' && $('#modal').classList.contains('hidden') && IS_TOUCH) showMenu(); });
+$('#rotateHint') && ($('#rotateHint').querySelector('button').onclick = () => $('#rotateHint').classList.add('hidden'));
+checkOrientation();
+
+/* 自动降画质：移动端连续几秒帧率过低时降一级（玩家手动选过画质则不动） */
+let perfAcc = 0, perfN = 0, perfCool = 6;
+function autoPerf(dt) {
+  if (!IS_TOUCH || meta.quality || qualityKey === 'low' || phase === 'title' || document.hidden) return;
+  perfCool -= dt; if (perfCool > 0) return;
+  perfAcc += dt; perfN++;
+  if (perfAcc < 4) return;
+  const avg = perfAcc / perfN; perfAcc = 0; perfN = 0;
+  if (avg > 1 / 28) { applyQuality(qualityKey === 'high' ? 'mid' : 'low'); perfCool = 6; toast('已自动降低画质以保持流畅（☰ 菜单里可以调整）'); }
+}
+canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); save(); toast('图形上下文丢失，正在恢复……', true); setTimeout(() => location.reload(), 1200); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
+
 /* ======================= 主循环 ======================= */
 const clock = new THREE.Clock();
 let boardTimer = 0;
@@ -1345,7 +1431,9 @@ function frame() {
     if (fr && boardTimer > 0.1) { boardTimer = 0; syncBoards(); }
   }
   player.update(dt);
-  if (phase === 'play') updatePrompt();
+  if (phase === 'play') updatePrompt(); else target = null;
+  touchUI.update();
+  autoPerf(dt);
   updateHammer(dt);
 
   // 镜头震动
@@ -1399,14 +1487,14 @@ requestAnimationFrame(frame);
 /* ======================= 调试 / 自动测试接口 ======================= */
 window.__ft = {
   get st() { return st; }, get meta() { return meta; }, G, D, W, player, camera, scene,
-  newRun, continueRun, startPlay, changed, describe, findTarget, ringBell, nextDay, showCodex, startTutorial, tutorialEvent, get tut() { return tut; }, doHammer, resolveHit, enterAnvil, leaveAnvil, heatInFurnace, insertSword, buyVend,
+  newRun, continueRun, startPlay, changed, describe, findTarget, ringBell, nextDay, showCodex, showTitle, showHelp, showMenu, toggleRelicList, startTutorial, tutorialEvent, get tut() { return tut; }, doHammer, resolveHit, enterAnvil, leaveAnvil, heatInFurnace, insertSword, buyVend,
   get phase() { return phase; }, set phase(v) { phase = v; },
   render: () => composer.render(),
   lookAt(x, y, z) { const d = new THREE.Vector3(x, y, z).sub(camera.position); player.yaw = Math.atan2(-d.x, -d.z); player.pitch = Math.atan2(d.y, Math.hypot(d.x, d.z)); player.applyCamera(); },
   tp(x, z) { player.pos.set(x, 1.62, z); player.applyCamera(); },
   pressE() { updatePrompt(); if (target && target.info && target.info.fn) { target.info.fn(); return target.info.title; } return null; },
-  updatePrompt, THREE, swordObj: id => swordObjs.get(id) && swordObjs.get(id).group,
-  step(n = 30, dt = 1 / 30) { for (let i = 0; i < n; i++) { player.update(dt); updateHammer(dt); sparks.update(dt); shards.update(dt); W.updaters.forEach(u => u(dt, i * dt)); swordObjs.forEach(o => { if (o.group.userData.update) o.group.userData.update(dt, i * dt); }); if (SW.updateSwordFx) SW.updateSwordFx(i * dt); } if (phase === 'play') updatePrompt(); composer.render(); },
+  updatePrompt, THREE, get target() { return target; }, touchUI: () => touchUI, swordObj: id => swordObjs.get(id) && swordObjs.get(id).group,
+  step(n = 30, dt = 1 / 30) { for (let i = 0; i < n; i++) { player.update(dt); updateHammer(dt); sparks.update(dt); shards.update(dt); W.updaters.forEach(u => u(dt, i * dt)); swordObjs.forEach(o => { if (o.group.userData.update) o.group.userData.update(dt, i * dt); }); if (SW.updateSwordFx) SW.updateSwordFx(i * dt); } if (phase === 'play') updatePrompt(); touchUI.update(); composer.render(); },
 };
 
 if (!globalThis.__RELEASE__ && /shot=/.test(location.hash)) import('../tools/scenarios.js');

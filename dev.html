@@ -2,7 +2,12 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="format-detection" content="telephone=no" />
   <title>铸剑大师 · FORGETAX</title>
   <link rel="stylesheet" href="css/style.css" />
   <script>
@@ -28,6 +33,7 @@
     <div id="floaters"></div>
     <div id="subtitle"></div>
     <div id="tutorial" class="hidden"></div>
+    <div id="miniPanel" class="hidden"></div>
     <div id="banner"></div>
     <div id="toasts"></div>
   </div>
@@ -53,6 +59,7 @@
 
   <div id="modal" class="hidden"><div class="m-box"></div></div>
   <div id="resume" class="hidden"><div>点击画面继续</div><small>WASD 移动 · 鼠标环顾 · E 交互 · Tab 遗物 · C 图鉴 · Esc 暂停</small></div>
+  <div id="rotateHint" class="hidden"><div class="rh-ico">⟳</div><div>横屏游玩体验更佳</div><small>把手机横过来；竖屏也可以继续玩</small><button class="btn">继续</button></div>
   <div id="loading">正在点燃熔炉……</div>
 
   <script type="module" src="src/main.js"></script>

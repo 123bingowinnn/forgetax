@@ -104,6 +104,47 @@ try {
       break;
     }
     case 'codex': { const D = F.D; Object.keys(D.FORM_NAMES).forEach((f, i) => { if (i % 3 !== 2) F.meta.codex[f] = 1; }); F.showCodex(P.get('tab') || 'forms'); break; }
+    case 'title': F.showTitle(); break;
+    case 'touchtest': {
+      const log = [];
+      const pe = (el, type, x, y, id = 1) => el.dispatchEvent(new PointerEvent(type, { pointerId: id, clientX: x, clientY: y, bubbles: true, cancelable: true, pointerType: 'touch', isPrimary: true }));
+      const zMove = document.getElementById('tzMove'), zLook = document.getElementById('tzLook');
+      log.push('ui=' + !!zMove + '/' + document.body.classList.contains('touch'));
+      // 摇杆：向前推 0.5 秒
+      const z0 = F.player.pos.z, x0 = F.player.pos.x;
+      pe(zMove, 'pointerdown', 100, innerHeight - 100); pe(zMove, 'pointermove', 100, innerHeight - 160);
+      F.step(15, 1 / 30);
+      pe(zMove, 'pointerup', 100, innerHeight - 160);
+      log.push('moved=' + Math.hypot(F.player.pos.z - z0, F.player.pos.x - x0).toFixed(2));
+      // 视角拖动
+      const yaw0 = F.player.yaw;
+      pe(zLook, 'pointerdown', innerWidth - 200, 200, 2); pe(zLook, 'pointermove', innerWidth - 120, 200, 2); pe(zLook, 'pointerup', innerWidth - 120, 200, 2);
+      log.push('turned=' + (F.player.yaw - yaw0).toFixed(2));
+      // 点按剑架上的剑 → 拿起
+      const sw = G.rackSwords(st)[0]; const wp = new F.THREE.Vector3(); F.swordObj(sw.id).getWorldPosition(wp); wp.y += 0.15;
+      F.tp(2.2, wp.z); F.lookAt(wp.x, wp.y, wp.z); F.step(2);
+      const v = wp.clone().project(F.camera); const sx = (v.x + 1) / 2 * innerWidth, sy = (1 - v.y) / 2 * innerHeight;
+      pe(zLook, 'pointerdown', sx, sy, 3); pe(zLook, 'pointerup', sx, sy, 3);
+      log.push('tapPick=' + !!G.handSword(st));
+      // 交互按钮：对准熔炉后点「交互」
+      F.tp(-2.2, 1.45); F.lookAt(-3.4, 0.95, 1.45); F.step(2);
+      const act = document.getElementById('tbAct'); log.push('actLabel=' + act.textContent.trim() + ' phase=' + F.phase + ' tgt=' + (F.findTarget() && F.findTarget().data.kind) + ' pos=' + F.player.pos.x.toFixed(2) + ',' + F.player.pos.z.toFixed(2) + ' mode=' + F.player.mode + ' info=' + JSON.stringify(F.target && F.target.info && F.target.info.act) + ' modal=' + !document.getElementById('modal').classList.contains('hidden'));
+      act.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 4, bubbles: true, cancelable: true, pointerType: 'touch' }));
+      log.push('inFurnace=' + !!G.furnaceSword(st));
+      const fs = G.furnaceSword(st); if (fs) { G.heatSword(st, fs.id); fs.loc = 'hand'; F.phase = 'play'; F.changed(); }
+      F.tp(0, 1.4); F.lookAt(0, 0.95, 2.35); F.step(2);
+      act.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 5, bubbles: true, cancelable: true, pointerType: 'touch' }));
+      F.step(30); F.phase = 'anvil'; F.step(1);
+      const h0 = G.anvilSword(st) ? G.anvilSword(st).hammers : -1;
+      pe(zLook, 'pointerdown', innerWidth / 2, innerHeight / 2, 6); F.step(10, 1 / 60); F.step(12, 1 / 30);
+      document.getElementById('tbHit').dispatchEvent(new PointerEvent('pointerdown', { pointerId: 7, bubbles: true, cancelable: true, pointerType: 'touch' })); F.step(10, 1 / 60); F.step(12, 1 / 30);
+      log.push('hammers=' + h0 + '->' + (G.anvilSword(st) ? G.anvilSword(st).hammers : 'broke'));
+      out.flow = log.join(' ; ');
+      break;
+    }
+    case 'help': F.showHelp(); break;
+    case 'menu': F.showMenu(); break;
+    case 'relist': st.relics = ['patched-apron','cracked-splice','unbroken-oath','giants-spine','dragon-heart','abyssal-pearl']; F.changed(); F.toggleRelicList(true); break;
     case 'tut': F.tp(0.3, 0.6); F.lookAt(3, 1.4, 0.9); break;
     case 'tutflow': {
       const log = [];
@@ -130,6 +171,7 @@ try {
       break;
     }
   }
+  const rh = document.getElementById('rotateHint'); if (rh && !P.get('rh')) rh.classList.add('hidden');
   F.step(Number(P.get('steps') || 20), 1 / 30);
   F.render();
   out.prompt = (document.querySelector('#prompt').innerText || '').replace(/\s+/g, ' ');
