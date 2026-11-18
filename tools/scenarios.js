@@ -1,4 +1,4 @@
-// 截图测试场景：index.html#shot=<名称>[&lv=12][&fr=1]
+// 截图测试场景：dev.html#shot=<名称>[&lv=12][&fr=1]
 const F = window.__ft;
 const P = new URLSearchParams(location.hash.slice(1));
 const name = P.get('shot');

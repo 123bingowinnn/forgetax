@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>铸剑大师 · FORGETAX</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <script>
+    window.__errs = [];
+    window.addEventListener('error', e => { window.__errs.push((e.message || e) + ' @' + (e.filename || '').split('/').pop() + ':' + e.lineno); document.documentElement.dataset.errs = window.__errs.join(' || '); });
+    window.addEventListener('unhandledrejection', e => { window.__errs.push('rejection: ' + (e.reason && (e.reason.stack || e.reason.message) || e.reason)); document.documentElement.dataset.errs = window.__errs.join(' || '); });
+  </script>
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+  </script>
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <div id="hud" class="hidden">
+    <div id="crosshair"></div>
+    <div id="gold"><i class="coin"></i><span id="goldNum">0</span><small id="goldDelta"></small></div>
+    <div id="controls"></div>
+    <div id="prompt" class="hidden"></div>
+    <div id="handLabel" class="hidden"></div>
+    <div id="consBar" class="hidden"></div>
+    <div id="procs"></div>
+    <div id="floaters"></div>
+    <div id="subtitle"></div>
+    <div id="tutorial" class="hidden"></div>
+    <div id="banner"></div>
+    <div id="toasts"></div>
+  </div>
+  <div id="flash"></div>
+  <div id="fade"></div>
+
+  <div id="relicList" class="hidden"></div>
+
+  <div id="title">
+    <div class="t-inner">
+      <div class="t-logo">FORGETAX</div>
+      <div class="t-cn">铸 剑 大 师</div>
+      <div class="t-sub">一锤下去，身价暴涨。再来一锤，也许只剩废铁。</div>
+      <div class="t-btns">
+        <button id="btnContinue" class="mbtn hidden">继续契约</button>
+        <button id="btnNew" class="mbtn">新的契约</button>
+        <button id="btnCodex" class="mbtn">剑之图鉴</button>
+        <button id="btnHow" class="mbtn">玩法说明</button>
+      </div>
+      <div id="titleStats"></div>
+    </div>
+  </div>
+
+  <div id="modal" class="hidden"><div class="m-box"></div></div>
+  <div id="resume" class="hidden"><div>点击画面继续</div><small>WASD 移动 · 鼠标环顾 · E 交互 · Tab 遗物 · C 图鉴 · Esc 暂停</small></div>
+  <div id="loading">正在点燃熔炉……</div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

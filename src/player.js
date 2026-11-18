@@ -23,6 +23,7 @@ export class Player {
     this.locked = false;
     this.trans = null;
     this.fixedPose = null;
+    this.joy = { x: 0, y: 0 };   // 虚拟摇杆（x 右，y 前），长度 0..1
 
     // 手持物挂点
     this.hand = new THREE.Group();
@@ -51,6 +52,14 @@ export class Player {
     }
   }
   exitLock() { if (document.pointerLockElement) document.exitPointerLock(); }
+
+  /** 触屏拖动视角（像素增量） */
+  look(dx, dy, sens = 0.0042) {
+    if (!this.lookEnabled || this.mode !== 'walk') return;
+    this.yaw -= dx * sens;
+    this.pitch -= dy * sens;
+    this.pitch = Math.max(-1.3, Math.min(1.25, this.pitch));
+  }
 
   forward() { return new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)); }
 
@@ -128,13 +137,14 @@ export class Player {
     this.pitch = Math.max(-1.3, Math.min(1.25, this.pitch + tilt * dt * 1.5));
 
     if (this.enabled) {
-      const f = (this.keys.KeyW ? 1 : 0) - (this.keys.KeyS ? 1 : 0);
-      const s = (this.keys.KeyD ? 1 : 0) - (this.keys.KeyA ? 1 : 0);
-      if (f || s) {
+      let f = (this.keys.KeyW ? 1 : 0) - (this.keys.KeyS ? 1 : 0) + this.joy.y;
+      let s = (this.keys.KeyD ? 1 : 0) - (this.keys.KeyA ? 1 : 0) + this.joy.x;
+      const mag = Math.min(1, Math.hypot(f, s));
+      if (mag > 0.05) {
         const fw = this.forward();
         const rt = new THREE.Vector3(-fw.z, 0, fw.x);
         const v = fw.multiplyScalar(f).add(rt.multiplyScalar(s));
-        v.normalize().multiplyScalar((this.keys.ShiftLeft ? 3.2 : 2.1) * dt);
+        v.normalize().multiplyScalar((this.keys.ShiftLeft ? 3.2 : 2.1) * mag * dt);
         this.pos.add(v);
         this.collide(this.pos);
         this.bobT += dt * 9;

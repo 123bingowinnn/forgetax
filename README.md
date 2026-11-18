@@ -3,9 +3,11 @@
 对照 Steam《ForgeTax》官方截图、预告片和玩法视频复刻的网页版：Three.js 第一人称 3D 低多边形地牢工坊。
 
 ## 运行
-ES Module 需要通过 HTTP 访问（不能直接双击 index.html）：
+`index.html` 是打包好的单文件版，双击即可游玩（由 `tools/build-single.sh` 生成，改完代码后重新运行）。
+
+开发版入口是 `dev.html`，ES Module 需要通过 HTTP 访问：
 - macOS：双击 `start.command`
-- 或者：`python3 -m http.server 8765`，然后打开 http://127.0.0.1:8765/
+- 或者：`python3 -m http.server 8765`，然后打开 http://127.0.0.1:8765/dev.html
 
 ## 操作
 - `WASD` 移动 · 鼠标环顾（点击画面锁定鼠标）· `E` 交互 · `Tab` 查看遗物 · `Esc` 暂停
@@ -35,5 +37,5 @@ ES Module 需要通过 HTTP 访问（不能直接双击 index.html）：
 | src/boards.js | 锻造面板、日历、贡品板、售货机屏幕（CanvasTexture） |
 | src/player.js / fx.js / audio.js | 第一人称控制、粒子与碎片、合成音效 |
 
-调试：`index.html#shot=anvil&lv=12&fr=1`、`#shot=flow`、`#shot=tribute` 等（见 tools/scenarios.js），`tools/shot.sh` 用无头 Chrome 截图。
+调试：`dev.html#shot=anvil&lv=12&fr=1`、`#shot=flow`、`#shot=tribute` 等（见 tools/scenarios.js），`tools/shot.sh` 用无头 Chrome 截图。
 旧的 2D 原型保留在 legacy-2d/。
