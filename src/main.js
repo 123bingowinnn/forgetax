@@ -17,6 +17,7 @@ import * as SW from './swords.js';
 import * as RL from './relics3d.js';
 import * as P from './props.js';
 import { swordIcon } from './icons.js';
+import { IS_TOUCH, initTouch, touchText } from './touch.js';
 
 const SAVE_KEY = 'forgetax3d.save.v3';
 const META_KEY = 'forgetax3d.meta.v3';
@@ -28,10 +29,26 @@ const DEBUG = /debug|shot|auto/.test(location.hash);
 /* ======================= 渲染器 ======================= */
 const canvas = $('#c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: DEBUG });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
+// 画质：high / mid / low（移动端默认按设备性能自动选择）
+const QUALITY = {
+  high: { pr: 1.75, shadow: true, soft: true, map: 1024, bloom: true },
+  mid:  { pr: 1.35, shadow: true, soft: false, map: 512, bloom: true },
+  low:  { pr: 1.0,  shadow: false, soft: false, map: 512, bloom: false },
+};
+function autoQuality() {
+  if (!IS_TOUCH) return 'high';
+  const cores = navigator.hardwareConcurrency || 4, mem = navigator.deviceMemory || 4;
+  const px = Math.max(screen.width, screen.height) * (window.devicePixelRatio || 1);
+  if (cores <= 4 || mem <= 3) return 'low';
+  if (px > 2600 && cores >= 8) return 'mid';
+  return 'mid';
+}
+let qualityKey = (() => { try { return JSON.parse(localStorage.getItem('forgetax3d.meta.v3') || '{}').quality || autoQuality(); } catch (e) { return autoQuality(); } })();
+let Q = QUALITY[qualityKey] || QUALITY.mid;
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, Q.pr));
 renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.enabled = Q.shadow;
+renderer.shadowMap.type = Q.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.15;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -45,6 +62,7 @@ scene.add(camera);
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.55, 0.45, 0.82);
+bloom.enabled = Q.bloom;
 composer.addPass(bloom);
 const grade = new ShaderPass({
   uniforms: { tDiffuse: { value: null }, tint: { value: new THREE.Color(1, 1, 1) }, tintAmt: { value: 0 }, vig: { value: 1.0 }, time: { value: 0 }, red: { value: 0 } },
@@ -78,11 +96,53 @@ const shards = new Shards(scene);
 const raycaster = new THREE.Raycaster();
 raycaster.far = 2.6;
 
-window.addEventListener('resize', () => {
-  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+// 竖屏时加大垂直视角，保证水平视野；固定机位（铁砧/铁栏）往后拉
+function fitFov() {
+  const a = innerWidth / innerHeight;
+  if (a >= 1.2) return 68;
+  const h = THREE.MathUtils.degToRad(68 / 2);
+  const v = 2 * Math.atan(Math.tan(h) * 1.2 / a);
+  return Math.min(98, THREE.MathUtils.radToDeg(v));
+}
+player.adjustFixed = (pos, look) => {
+  const a = innerWidth / innerHeight;
+  if (a >= 1.2) return pos;
+  const back = Math.min(0.75, (1.2 / a - 1) * 0.45);
+  const dir = pos.clone().sub(look); dir.y = 0; dir.normalize();
+  return pos.clone().addScaledVector(dir, back);
+};
+function onResize() {
+  camera.aspect = innerWidth / innerHeight; camera.fov = fitFov(); camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight);
   sparks.setScale(innerHeight);
-});
+  if (player.mode === 'fixed' && player.rawFixed) player.goFixed(player.rawFixed.pos, player.rawFixed.target, 0.01);
+  checkOrientation();
+}
+window.addEventListener('resize', onResize);
+window.addEventListener('orientationchange', () => setTimeout(onResize, 250));
+camera.fov = fitFov(); camera.updateProjectionMatrix();
+
+function applyQuality(k) {
+  qualityKey = k; Q = QUALITY[k];
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, Q.pr));
+  renderer.shadowMap.enabled = Q.shadow;
+  renderer.shadowMap.type = Q.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+  scene.traverse(o => {
+    if (o.isLight && o.shadow && o.castShadow) { o.shadow.mapSize.set(Q.map, Q.map); if (o.shadow.map) { o.shadow.map.dispose(); o.shadow.map = null; } }
+    if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { m.needsUpdate = true; });
+  });
+  bloom.enabled = Q.bloom;
+  onResize();
+}
+
+let rotateShown = false;
+function checkOrientation() {
+  const el = document.getElementById('rotateHint');
+  if (!el) return;
+  const portrait = IS_TOUCH && innerHeight > innerWidth * 1.1;
+  if (!portrait) { el.classList.add('hidden'); return; }
+  if (!rotateShown) { rotateShown = true; el.classList.remove('hidden'); }
+}
 
 /* ======================= 状态 ======================= */
 let st = null;
@@ -1349,4 +1409,4 @@ window.__ft = {
   step(n = 30, dt = 1 / 30) { for (let i = 0; i < n; i++) { player.update(dt); updateHammer(dt); sparks.update(dt); shards.update(dt); W.updaters.forEach(u => u(dt, i * dt)); swordObjs.forEach(o => { if (o.group.userData.update) o.group.userData.update(dt, i * dt); }); if (SW.updateSwordFx) SW.updateSwordFx(i * dt); } if (phase === 'play') updatePrompt(); composer.render(); },
 };
 
-if (/shot=/.test(location.hash)) import('../tools/scenarios.js');
+if (!globalThis.__RELEASE__ && /shot=/.test(location.hash)) import('../tools/scenarios.js');

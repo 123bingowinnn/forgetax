@@ -11,7 +11,7 @@ mkdir -p dist
 "$ESB" src/main.js --bundle --format=iife --minify --target=es2020 \
   --alias:three=./vendor/three/three.module.js \
   --alias:three/addons=./vendor/three/addons \
-  --external:../tools/scenarios.js \
+  --define:globalThis.__RELEASE__=true --external:../tools/scenarios.js \
   --legal-comments=none --outfile=.build/bundle.js --log-level=warning
 python3 - <<'EOF'
 import re

@@ -67,6 +67,8 @@ export class Player {
 
   /** 平滑移动到固定机位（如铁砧视角） */
   goFixed(pos, target, dur = 0.5, done) {
+    this.rawFixed = { pos: pos.clone(), target: target.clone() };
+    if (this.adjustFixed) pos = this.adjustFixed(pos, target);
     const q = new THREE.Quaternion();
     const m = new THREE.Matrix4().lookAt(pos, target, new THREE.Vector3(0, 1, 0));
     q.setFromRotationMatrix(m);
