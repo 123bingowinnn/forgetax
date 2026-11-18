@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>relics-b preview</title>
+<style>
+  html,body{margin:0;height:100%;background:#1c1816;overflow:hidden;font-family:sans-serif}
+  canvas{display:block;position:absolute;left:0;top:0}
+  .lbl{position:absolute;color:#e8d6b0;font-size:12px;white-space:nowrap;text-shadow:0 1px 2px #000;line-height:1.15}
+  .lbl small{color:#8a7a62;font-size:10px}
+  .ref{position:absolute;image-rendering:auto;opacity:.95}
+  #err{position:absolute;left:8px;top:8px;color:#ff7070;font:12px monospace;white-space:pre;z-index:9}
+</style>
+<script type="importmap">{"imports":{"three":"../vendor/three/three.module.js","three/addons/":"../vendor/three/addons/"}}</script>
+</head><body>
+<div id="err"></div>
+<script type="module">
+// 用法：?s=起始序号&n=个数&cols=列数&ref=0(不显示参考图)&ry=整体绕Y旋转
+// 每格左侧：模型（与 relics3d.js renderIcon 同样的 3/4 视角与三点光），右侧：原作参考图。
+import * as THREE from 'three';
+const errEl = document.getElementById('err');
+addEventListener('error', (e) => { errEl.textContent += e.message + '\n'; });
+try {
+  const { BUILDERS } = await import('../src/relics3d_b.js');
+  const REF = await (await fetch('../docs/RELIC_MODELS.md')).text();
+  const refOf = {}, numOf = {};
+  for (const m of REF.matchAll(/\|\s*(\d+)\s*\|\s*([\w-]+)\s*\|\s*(\S+)\s*\|/g)) { refOf[m[2]] = m[3]; numOf[m[2]] = m[1]; }
+  const Q = new URLSearchParams(location.search);
+  const ids = Object.keys(BUILDERS);
+  const S0 = +(Q.get('s') || 0), N = +(Q.get('n') || ids.length);
+  const shown = ids.slice(S0, S0 + N);
+  const showRef = Q.get('ref') !== '0';
+  const COLS = +(Q.get('cols') || 4);
+  const W = innerWidth, H = innerHeight;
+  const rows = Math.ceil(shown.length / COLS);
+  const cellW = W / COLS, cellH = H / rows;
+  const S = Math.min(cellH - 22, showRef ? cellW / 2 - 6 : cellW - 6);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(W, H);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.setScissorTest(true);
+  document.body.appendChild(renderer.domElement);
+  const scene = new THREE.Scene();
+  scene.add(new THREE.HemisphereLight(0xfff0dc, 0x2a2020, 1.2));
+  const key = new THREE.DirectionalLight(0xffe6c8, 2.4); key.position.set(-1.0, 2.0, 2.6);
+  const fill = new THREE.DirectionalLight(0xb0c0ff, 0.7); fill.position.set(2.2, 0.6, 1.4);
+  const rim = new THREE.DirectionalLight(0xffd0a0, 1.6); rim.position.set(0.8, 1.6, -2.5);
+  scene.add(key, fill, rim);
+  const camera = new THREE.PerspectiveCamera(24, 1, 0.01, 10);
+  const bg = new THREE.Color(0x1c1816);
+  renderer.setClearColor(0x120e0c);
+  renderer.setViewport(0, 0, W, H); renderer.setScissor(0, 0, W, H); renderer.clear();
+  const ry = +(Q.get('ry') || 0);
+
+  const items = shown.map((id, i) => {
+    let g = new THREE.Group();
+    const r = BUILDERS[id](g); if (r && r.isObject3D) g = r;
+    let tris = 0;
+    g.traverse((o) => { if (o.isMesh) { const gg = o.geometry; tris += (gg.index ? gg.index.count : gg.attributes.position.count) / 3; } });
+    g.rotation.y = ry;
+    return { id, g, tris: Math.round(tris), i };
+  });
+  const bb = new THREE.Box3(), sphere = new THREE.Sphere();
+  const dir = new THREE.Vector3(0.4, 0.38, 1).normalize();
+  const draw = () => {
+    for (const it of items) {
+      const c = it.i % COLS, r = Math.floor(it.i / COLS);
+      const x = c * cellW + 3, yTop = r * cellH + 3;
+      scene.add(it.g);
+      it.g.updateMatrixWorld(true);
+      bb.setFromObject(it.g); bb.getBoundingSphere(sphere);
+      const dist = sphere.radius / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2)) * 0.98;
+      camera.position.copy(sphere.center).addScaledVector(dir, dist);
+      camera.near = dist * 0.05; camera.far = dist * 4; camera.updateProjectionMatrix();
+      camera.lookAt(sphere.center);
+      const yGl = H - yTop - S;
+      renderer.setViewport(x, yGl, S, S); renderer.setScissor(x, yGl, S, S);
+      renderer.setClearColor(bg); renderer.clear();
+      renderer.render(scene, camera);
+      scene.remove(it.g);
+      it.x = x; it.y = yTop;
+    }
+  };
+  draw();
+  for (const it of items) {
+    if (showRef) {
+      const im = document.createElement('img');
+      im.className = 'ref'; im.src = '../' + refOf[it.id];
+      Object.assign(im.style, { left: (it.x + S + 4) + 'px', top: it.y + 'px', width: S + 'px', height: S + 'px' });
+      document.body.appendChild(im);
+    }
+    const d = document.createElement('div');
+    d.className = 'lbl';
+    d.innerHTML = `#${numOf[it.id]} ${it.id} <small>${it.tris}▲</small>`;
+    if (it.tris >= 2000) d.style.color = '#ff6060';
+    Object.assign(d.style, { left: it.x + 'px', top: (it.y + S + 2) + 'px' });
+    document.body.appendChild(d);
+  }
+  console.log(items.map((s) => `${s.id}:${s.tris}`).join(' '));
+  document.title = 'ok';
+} catch (e) { errEl.textContent += e.stack; }
+</script>
+</body></html>

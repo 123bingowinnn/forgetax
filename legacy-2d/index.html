@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>铸剑大师 · ForgeTax 网页版</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <div id="hud" class="hidden">
+    <!-- 左上：日历 -->
+    <div id="calendar" class="paper">
+      <div class="cal-head"><span id="calTitle">契约 · 第 1 天</span><span id="calSub">/ 21</span></div>
+      <div id="calGrid"></div>
+      <div class="cal-quota">今日贡额 <b id="calQuota">1,800 G</b></div>
+      <div class="cal-rage"><span>巨龙怒气</span><span id="rageIcons"></span></div>
+    </div>
+
+    <!-- 中上：锻造面板 -->
+    <div id="panel">
+      <div class="p-row1">
+        <span id="pName">—</span>
+        <span id="pLevel"></span>
+      </div>
+      <div class="p-row2">
+        <span class="p-lbl">上贡价值</span>
+        <span id="pValue">—</span>
+      </div>
+      <div class="p-row3">
+        <div id="pLast"><span class="muted">尚未锻造</span></div>
+        <div class="p-charge">
+          <div id="pPips"></div>
+          <span id="pChargeTxt">0/10</span>
+        </div>
+      </div>
+      <div id="pProbs"></div>
+      <div id="pBar"></div>
+      <div id="pTags"></div>
+    </div>
+    <div id="frenzyBar" class="hidden"><div class="fb-fill"></div><span>入神</span></div>
+
+    <!-- 右侧：遗物 / 剑架 / 操作 -->
+    <div id="rightCol">
+      <div class="box">
+        <div class="box-title">遗物 <span id="relicCount">0/8</span></div>
+        <div id="relicBar"></div>
+      </div>
+      <div class="box rack-box">
+        <div class="box-title">剑架 <span id="rackCount"></span></div>
+        <div id="rack"></div>
+      </div>
+      <div id="actions">
+        <button id="btnHeat" class="btn" data-tip="把铁砧上的剑送进熔炉加热（每天每把剑只需一次）">🔥 加热 <kbd>F</kbd></button>
+        <button id="btnTake" class="btn" data-tip="把铁砧上的剑放回剑架">↩ 收回 <kbd>E</kbd></button>
+        <button id="btnAltar" class="btn" data-tip="把铁砧上的剑放上贡台">⛩ 上贡台 <kbd>T</kbd></button>
+        <button id="btnShop" class="btn" data-tip="遗物售卖机：投入剑换取剑币，购买遗物">🎰 遗物机 <kbd>M</kbd></button>
+        <button id="btnGhost" class="btn ghost hidden" data-tip="幽灵商人今天来了！用金币购买消耗品">👻 幽灵商人 <kbd>G</kbd></button>
+        <button id="btnBell" class="btn bell" data-tip="敲响贡铃：把贡台上的剑献给巨龙，结束今天">🔔 敲响贡铃 <kbd>B</kbd></button>
+      </div>
+    </div>
+
+    <!-- 左下：资源 / 贡台 -->
+    <div id="resources" class="box">
+      <div class="res"><span class="ico">🪙</span><b id="gold">0</b><span class="muted">金币</span></div>
+      <div class="res"><span class="ico">⚔️</span><b id="coins">0</b><span class="muted">剑币</span></div>
+      <div class="altar">
+        <div class="altar-head">贡台 <span id="altarCount">0 把</span></div>
+        <div class="altar-sum"><b id="altarTotal">0</b> / <span id="altarQuota">1,800</span> G</div>
+        <div class="altar-bar"><div id="altarFill"></div></div>
+      </div>
+    </div>
+
+    <!-- 底部中：提示与消耗品 -->
+    <div id="bottomCenter">
+      <div id="hint"></div>
+      <div id="consHelp" class="muted hidden">数字键选择 · <kbd>Q</kbd> 使用</div>
+      <div id="hotbar"></div>
+    </div>
+
+    <div id="topLeftBtns">
+      <button id="btnHelp" class="icon-btn" data-tip="玩法说明">?</button>
+      <button id="btnMute" class="icon-btn" data-tip="音效开关">🔊</button>
+      <button id="btnMenu" class="icon-btn" data-tip="返回标题">☰</button>
+    </div>
+
+    <div id="floaters"></div>
+    <div id="banner" class="hidden"></div>
+  </div>
+
+  <div id="toasts"></div>
+  <div id="tooltip" class="hidden"></div>
+
+  <!-- 标题画面 -->
+  <div id="title">
+    <div class="title-inner">
+      <div class="title-cn">铸剑大师</div>
+      <div class="title-en">F O R G E T A X</div>
+      <div class="title-sub">每一锤，都有取舍。满足巨龙的贡品要求，否则就承受它的怒火。</div>
+      <div class="title-btns">
+        <button id="btnContinue" class="btn big hidden">继续契约</button>
+        <button id="btnNew" class="btn big primary">新的契约</button>
+        <button id="btnHow" class="btn big">玩法说明</button>
+      </div>
+      <div id="titleStats" class="muted"></div>
+    </div>
+  </div>
+
+  <div id="modal" class="hidden">
+    <div class="modal-box"></div>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

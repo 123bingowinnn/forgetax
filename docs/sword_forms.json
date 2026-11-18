@@ -1,0 +1,457 @@
+[
+ [
+  "base",
+  [
+   [
+    1,
+    "旧剑",
+    "Worn Sword"
+   ],
+   [
+    38,
+    "精修剑",
+    "Refined Sword"
+   ],
+   [
+    39,
+    "还算好用的铁剑",
+    "Decent Iron Sword"
+   ]
+  ]
+ ],
+ [
+  "laneA 厚铁线(+6/+8)",
+  [
+   [
+    2,
+    "厚铁剑",
+    "Thick Iron Sword"
+   ],
+   [
+    3,
+    "便携铁门",
+    "Portable Iron Door"
+   ]
+  ]
+ ],
+ [
+  "laneB 怒铁线(+6/+8)",
+  [
+   [
+    4,
+    "愤怒的铁疙瘩",
+    "Angry Hunk of Metal"
+   ],
+   [
+    5,
+    "会咬人的剑",
+    "Biting Blade"
+   ]
+  ]
+ ],
+ [
+  "laneC 魔力线(+6/+8)",
+  [
+   [
+    6,
+    "魔力碎片",
+    "Shard of Magic"
+   ],
+   [
+    7,
+    "觉醒之剑",
+    "Awakening Blade"
+   ]
+  ]
+ ],
+ [
+  "citadel 城塞剑",
+  [
+   [
+    8,
+    "这把巨剑不太对劲",
+    "Something's Off with This Greatsword"
+   ],
+   [
+    40,
+    "双层铁板巨剑",
+    "Double-Plated Greatsword"
+   ],
+   [
+    9,
+    "被扯下门轴的城门",
+    "A Gate Torn from Its Hinges"
+   ],
+   [
+    10,
+    "带把手的要塞",
+    "Fortress with a Handle"
+   ],
+   [
+    11,
+    "碾山城塞",
+    "Mountain-Crushing Citadel"
+   ],
+   [
+    12,
+    "裂陆钢铁城塞",
+    "Continent-Cleaving Iron Citadel"
+   ]
+  ]
+ ],
+ [
+  "holy 圣剑",
+  [
+   [
+    13,
+    "光缚银剑",
+    "Lightbound Silver Sword"
+   ],
+   [
+    41,
+    "祝福之刃",
+    "Blessed Blade"
+   ],
+   [
+    14,
+    "破晓之刃",
+    "Dawnblade"
+   ],
+   [
+    15,
+    "贤王之剑",
+    "Blade of the Worthy King"
+   ],
+   [
+    16,
+    "应许黎明之剑",
+    "Sword of the Promised Dawn"
+   ],
+   [
+    17,
+    "王者之剑",
+    "Excalibur"
+   ]
+  ]
+ ],
+ [
+  "saw 锯刃",
+  [
+   [
+    18,
+    "这是锯还是剑？",
+    "Is This a Saw or a Sword?"
+   ],
+   [
+    42,
+    "啃甲锯刃",
+    "Plate-Chewing Sawblade"
+   ],
+   [
+    19,
+    "咬合钢锯刃",
+    "Interlocking Steel Sawblade"
+   ],
+   [
+    20,
+    "碎钢绞刃",
+    "Steel-Grinding Shredder"
+   ],
+   [
+    21,
+    "断山巨锯",
+    "Mountain-Cutting Saw"
+   ],
+   [
+    22,
+    "无可阻挡的毁灭齿轮",
+    "Unstoppable Gears of Ruin"
+   ]
+  ]
+ ],
+ [
+  "dragon 龙牙",
+  [
+   [
+    23,
+    "幼龙之牙",
+    "Young Dragon's Fang"
+   ],
+   [
+    43,
+    "龙鳞之刃",
+    "Dragonscale Blade"
+   ],
+   [
+    24,
+    "怒鳞龙刃",
+    "Bristling Dragonblade"
+   ],
+   [
+    25,
+    "翼龙之刃",
+    "Winged Wyvernblade"
+   ],
+   [
+    26,
+    "龙王吐息之刃",
+    "Blade of the Dragon King's Breath"
+   ],
+   [
+    27,
+    "魔剑·屠龙者",
+    "Demon Blade: Dragonslayer"
+   ]
+  ]
+ ],
+ [
+  "rune 符文剑",
+  [
+   [
+    28,
+    "刻符之刃",
+    "Runescribed Blade"
+   ],
+   [
+    44,
+    "觉醒符文剑",
+    "Awakening Runeblade"
+   ],
+   [
+    29,
+    "过载之刃",
+    "Overcharged Blade"
+   ],
+   [
+    30,
+    "大法师的奥术引擎",
+    "Archmage's Arcane Engine"
+   ],
+   [
+    31,
+    "撕裂现实之剑",
+    "Reality-Cracking Blade"
+   ],
+   [
+    32,
+    "阿卡夏·创世之刃",
+    "Akasha, Blade of Genesis"
+   ]
+  ]
+ ],
+ [
+  "split 分裂剑",
+  [
+   [
+    33,
+    "断了也不散的剑",
+    "Broken but Still Together"
+   ],
+   [
+    45,
+    "不想独处的剑",
+    "Blade That Hates Being Alone"
+   ],
+   [
+    34,
+    "号令群剑之剑",
+    "Blade That Commands Blades"
+   ],
+   [
+    35,
+    "厚颜无耻之剑",
+    "Shameless Blade"
+   ],
+   [
+    36,
+    "千剑之主",
+    "Lord of a Thousand Swords"
+   ],
+   [
+    37,
+    "万刃君王",
+    "Sovereign of Blades"
+   ]
+  ]
+ ],
+ [
+  "tree 世界树(商人)",
+  [
+   [
+    100,
+    "枯枝",
+    "Fallen Branch"
+   ],
+   [
+    101,
+    "意外结实的树枝",
+    "Surprisingly Sturdy Branch"
+   ],
+   [
+    102,
+    "打不断的棍子",
+    "Club That Refuses to Break"
+   ],
+   [
+    103,
+    "大器晚成的棍子",
+    "Late-Blooming Club"
+   ],
+   [
+    104,
+    "萌动之种",
+    "A Seed Begins to Stir"
+   ],
+   [
+    105,
+    "这曾是根树枝",
+    "This Used to Be a Branch"
+   ],
+   [
+    106,
+    "森林之芽",
+    "A Forest in a Bud"
+   ],
+   [
+    107,
+    "千年古树",
+    "Thousand-Year-Old Tree"
+   ],
+   [
+    108,
+    "涌泉之树",
+    "Tree of the Wellspring"
+   ],
+   [
+    109,
+    "承载世界之树",
+    "Tree That Holds the World"
+   ],
+   [
+    110,
+    "世界树·尤克特拉希尔",
+    "Yggdrasil, the World Tree"
+   ]
+  ]
+ ],
+ [
+  "fish 鱼刃(商人)",
+  [
+   [
+    200,
+    "海带缠着的剑片",
+    "Kelp-Wrapped Blade Shard"
+   ],
+   [
+    201,
+    "墨鱼骨小刀",
+    "Cuttlebone Knife"
+   ],
+   [
+    202,
+    "蟹壳锯刃",
+    "Crab-Shell Sawblade"
+   ],
+   [
+    203,
+    "冻金枪鱼",
+    "Frozen Tuna"
+   ],
+   [
+    204,
+    "鱼串签",
+    "Fish Skewer"
+   ],
+   [
+    205,
+    "烤鱼串",
+    "Grilled Fish Skewer"
+   ],
+   [
+    206,
+    "河豚狼牙棒",
+    "Pufferfish Mace"
+   ],
+   [
+    207,
+    "珊瑚祭坛之刃",
+    "Coral Altar Blade"
+   ],
+   [
+    208,
+    "鲸颚之刃",
+    "Whale Jawblade"
+   ],
+   [
+    209,
+    "克拉肯触手",
+    "Kraken Tentacle"
+   ],
+   [
+    210,
+    "利维坦之牙",
+    "Leviathan's Fang"
+   ]
+  ]
+ ],
+ [
+  "funeral 葬仪剑(商人)",
+  [
+   [
+    3000,
+    "生锈的棺材钉",
+    "Rusty Coffin Nail"
+   ],
+   [
+    3001,
+    "裹尸布墓刀",
+    "Shroud-Wrapped Grave Knife"
+   ],
+   [
+    3002,
+    "掘墓人的铲子",
+    "Gravedigger’s Shovel"
+   ],
+   [
+    3003,
+    "断裂墓碑巨剑",
+    "Broken Tombstone Greatsword"
+   ],
+   [
+    3004,
+    "棺材盖巨剑",
+    "Coffin-Lid Greatsword"
+   ],
+   [
+    3005,
+    "唤醒亡者之钟",
+    "Bell That Wakes the Dead"
+   ],
+   [
+    3006,
+    "游魂火炬",
+    "Torch of Wandering Souls"
+   ],
+   [
+    3007,
+    "守墓人之镰",
+    "Gravekeeper’s Scythe"
+   ],
+   [
+    3008,
+    "拔起的坟墓",
+    "Uprooted Grave"
+   ],
+   [
+    3009,
+    "亡者墓园",
+    "Graveyard of the Dead"
+   ],
+   [
+    3010,
+    "冥界之钥",
+    "Key to the Underworld"
+   ]
+  ]
+ ]
+]

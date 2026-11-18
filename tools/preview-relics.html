@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>relics preview</title>
+<style>
+  html,body{margin:0;height:100%;background:#120d0a;overflow:hidden;font-family:"PingFang SC","Microsoft YaHei",sans-serif}
+  canvas{display:block}
+  .lbl{position:absolute;transform:translate(-50%,0);color:#e8d6b0;font-size:11px;white-space:nowrap;text-shadow:0 1px 2px #000;text-align:center;line-height:1.1}
+  .lbl small{color:#8a7a62;font-size:9px;display:block}
+  .lbl.c{color:#8fe0d8}
+  .lbl.miss{color:#ff8060}
+  #grid{position:absolute;inset:0;display:grid;gap:6px 10px;padding:8px;align-content:start;overflow:hidden}
+  .cell{display:flex;flex-direction:column;align-items:center;color:#e8d6b0;font-size:12px}
+  .cell .pair{display:flex;gap:2px}
+  .cell img{width:var(--sz);height:var(--sz);background:#1e1a17;border:1px solid #3a2e22}
+  .cell small{color:#8a7a62;font-size:10px}
+  .cell.miss{color:#ff8060}
+  #err{position:absolute;left:8px;bottom:8px;color:#ff7070;font:12px monospace;white-space:pre;z-index:9}
+</style>
+<script type="importmap">{"imports":{"three":"../vendor/three/three.module.js","three/addons/":"../vendor/three/addons/"}}</script>
+</head><body>
+<div id="err"></div>
+<script type="module">
+import * as THREE from 'three';
+import { buildRelic, buildConsumable, RELIC_IDS, CONSUMABLE_IDS, renderIcon, hasModel } from '../src/relics3d.js';
+import { RELIC_MAP, CONS_MAP } from '../src/data.js';
+const errEl = document.getElementById('err');
+addEventListener('error', (e) => { errEl.textContent += e.message + '\n'; });
+// 参考图文件名（docs/RELIC_MODELS.md）
+const REF = {
+  'ash-sieve': 'sieve', 'bent-nail': 'nail', 'black-knot': 'seal', 'blunt-mallet': 'mallet', 'bound-idol': 'idol', 'charcoal-pouch': 'coal',
+  'first-brand': 'firstseal', 'heavy-paperweight': 'mold', 'inspection-stamp': 'coin', 'iron-signet': 'token', 'leather-loop': 'loop',
+  'lucky-coal': 'spark', 'patched-apron': 'apron', 'patient-weight': 'patience', 'red-thread': 'thread', 'relief-sack': 'patchbag',
+  'sealing-stone': 'hold', 'wax-effigy': 'wax', 'worn-whetstone': 'file', 'undertakers-chalice': 'shard', 'blind-die': 'dice',
+  'chained-hourglass': 'hourglass', 'closed-third-eye': 'thirdeye', 'cold-teacup': 'cup', 'cracked-wristwatch': 'watch', 'double-knot': 'knot',
+  'hungry-molar': 'tooth', 'iron-comb': 'ironcomb', 'iron-hoop': 'rivet', 'little-wind-bell': 'chime', 'thorn-weight': 'thorn',
+  'broken-holy-sword': 'holy', 'cracked-crown': 'crown', 'cracked-splice': 'repair', 'golden-nail': 'pin', 'grudge-nail': 'grudge',
+  'mourning-knot': 'mourning', 'scorched-charm': 'brace', 'sealed-heart': 'rage', 'third-hand': 'glove', 'worn-voucher': 'voucher',
+  'burial-coin': 'burial', 'collectors-hook': 'hook', 'cracked-bell': 'bell', 'defeated-kings-seal': 'royalseal', 'ember-locket': 'locket',
+  'interlocking-weights': 'scales', 'journeyman-badge': 'badge', 'lightning-mark': 'star', 'silver-tuning-fork': 'fork', 'sleeping-ember': 'still',
+  'soot-censer': 'incense', 'unbroken-oath': 'oath', 'wirebound-scabbard': 'insurance', 'worn-grip': 'speed', 'black-iron-stone': 'blackstone',
+  'bronze-cog': 'gear', 'dragonscale-tongs': 'tongs', 'echo-hammer': 'echo', 'giants-spine': 'spine', 'glass-hourglass': 'glass',
+  'golden-cog': 'goldgear', 'ossuary-kings-scabbard': 'ossuary', 'sealed-rebate': 'letter', 'smiths-testament': 'testament', 'tax-tally': 'collector',
+  'bell-collar': 'collar', 'headless-bell': 'headless', 'obsidian-eye': 'obsidian', 'red-hourglass': 'redglass', 'royal-spike': 'royalnail',
+  'silver-supply-writ': 'silverpermit', 'butterfingers': 'butterfingers', 'dawn-scabbard': 'dawnsheath', 'dragons-pardon': 'dragonpardon',
+  'kings-empty-cup': 'kingcup', 'phoenix-ash': 'phoenix', 'sickle-and-hammer': 'sicklehammer', 'split-twin-mirror': 'mirror',
+  'wandering-ghosts-ledger': 'ghostledger', 'pocket-hearth': 'hearth', 'abyssal-pearl': 'deeppearl', 'ceaseless-driveshaft': 'endlessaxle',
+  'eternal-seed': 'eternalseed', 'perfect-mana-core': 'perfectcore', 'possessed-bellows': 'bellows', 'royal-change': 'royalchange',
+  'unyielding-cornerstone': 'cornerstone', 'supply-permit': 'supply', 'dragon-heart': 'dragonheart', 'seal-of-twins': 'twinseal',
+  'undertakers-ledger': 'funeralledger', 'undying-wick': 'everwick', 'dragon-signet': 'dragonseal', 'oracle-die': 'oracledie',
+  'lifetime-contract': 'lifecontract', ward: 'ward', rewind: 'rewind', chalk: 'chalk', powder: 'powder', starshard: 'starshard',
+  oblivion: 'oblivion', delivery: 'delivery',
+};
+try {
+  const Q = new URLSearchParams(location.search);
+  const mode = Q.get('mode') || 'scene';
+  const all = [
+    ...RELIC_IDS.map((id, i) => ({ n: i, id, kind: 'relic', name: RELIC_MAP[id]?.name || id })),
+    ...CONSUMABLE_IDS.map((id, i) => ({ n: RELIC_IDS.length + i, id, kind: 'consumable', name: CONS_MAP[id]?.name || id })),
+  ];
+  if (Q.get('unk')) all.push({ n: -1, id: 'zzz-unknown', kind: 'relic', name: '未知 id' });
+  const S0 = +(Q.get('s') || 0), N = +(Q.get('n') || all.length);
+  const shown = all.slice(S0, S0 + N);
+  const W = innerWidth, H = innerHeight;
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(W, H);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.shadowMap.enabled = true;
+  const build = (it) => (it.kind === 'relic' ? buildRelic(it.id) : buildConsumable(it.id));
+  const stats = [];
+
+  if (mode === 'compare') {
+    // 并排：左原作图标，右 renderIcon
+    const cols = +(Q.get('cols') || 6);
+    const sz = Math.floor((W - 16 - (cols - 1) * 10) / cols / 2) - 4;
+    const grid = document.createElement('div');
+    grid.id = 'grid';
+    grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+    grid.style.setProperty('--sz', sz + 'px');
+    document.body.appendChild(grid);
+    for (const it of shown) {
+      const g = build(it);
+      const url = renderIcon(renderer, g, Math.min(256, sz * 2));
+      const miss = !hasModel(it.kind, it.id);
+      const d = document.createElement('div');
+      d.className = 'cell' + (miss ? ' miss' : '');
+      d.innerHTML = `<div class="pair"><img src="../ref/wiki/relics/${REF[it.id]}.webp"><img src="${url}"></div>` +
+        `<span>#${it.n} ${it.name}</span><small>${it.id} ${g.userData.tris}▲</small>`;
+      grid.appendChild(d);
+      stats.push(`${it.id}:${g.userData.tris}`);
+    }
+  } else {
+    document.body.appendChild(renderer.domElement);
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x120d0a);
+    const camera = new THREE.PerspectiveCamera(24, W / H, 0.1, 80);
+    scene.add(new THREE.HemisphereLight(0xffd9b0, 0x1a1410, 0.45));
+    const key = new THREE.DirectionalLight(0xffd2a0, 2.2); key.position.set(-2, 3, 4);
+    key.castShadow = true; key.shadow.mapSize.set(2048, 2048);
+    Object.assign(key.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4 });
+    scene.add(key);
+    const fill = new THREE.DirectionalLight(0x8090c0, 0.45); fill.position.set(3, 1, 2); scene.add(fill);
+    const warm = new THREE.PointLight(0xff8a3a, 3, 8, 1.5); warm.position.set(0, 0.6, 1.5); scene.add(warm);
+
+    const COLS = +(Q.get('cols') || 15), DX = 0.34, DY = 0.4;
+    const rows = Math.ceil(shown.length / COLS);
+    const shelfMat = new THREE.MeshStandardMaterial({ color: 0x3a2618, roughness: 0.9 });
+    for (let r = 0; r < rows; r++) {
+      const s = new THREE.Mesh(new THREE.BoxGeometry(COLS * DX + 0.1, 0.03, 0.34), shelfMat);
+      s.position.set(0, -r * DY - 0.015, 0); s.receiveShadow = true; scene.add(s);
+    }
+    shown.forEach((it, i) => {
+      const r = Math.floor(i / COLS), c = i % COLS;
+      it.g = build(it);
+      it.g.position.set((c - (COLS - 1) / 2) * DX, -r * DY, 0);
+      scene.add(it.g);
+    });
+    const cy = -(rows - 1) * DY / 2 + 0.1;
+    const dist = Math.max(COLS * DX * 1.5 * (16 / 9) / (W / H), rows * DY * 2.55);
+    camera.position.set(0, cy + dist * 0.2, dist);
+    camera.lookAt(0, cy + 0.03, 0);
+    camera.updateMatrixWorld();
+    const v = new THREE.Vector3();
+    for (const it of shown) {
+      v.set(it.g.position.x, it.g.position.y - 0.02, 0.17).project(camera);
+      const d = document.createElement('div');
+      d.className = 'lbl' + (it.kind === 'consumable' ? ' c' : '') + (hasModel(it.kind, it.id) ? '' : ' miss');
+      d.innerHTML = `${it.name}<small>#${it.n} ${it.g.userData.tris}▲</small>`;
+      d.style.left = ((v.x + 1) / 2 * W) + 'px';
+      d.style.top = ((1 - v.y) / 2 * H) + 'px';
+      document.body.appendChild(d);
+      stats.push(`${it.id}:${it.g.userData.tris}`);
+    }
+    const clock = new THREE.Clock();
+    const frame = () => {
+      const t = clock.getElapsedTime();
+      for (const it of shown) it.g.userData.update?.(0.016, t);
+      renderer.render(scene, camera);
+    };
+    frame();
+    renderer.setAnimationLoop(frame);
+  }
+  console.log(stats.join(' '));
+  const over = stats.filter((s) => +s.split(':')[1] >= 2000);
+  if (over.length) errEl.textContent += '>=2k tris: ' + over.join(' ') + '\n';
+  document.title = 'ok';
+} catch (e) { errEl.textContent += e.stack; }
+</script>
+</body></html>
