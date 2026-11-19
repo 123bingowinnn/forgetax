@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>forms-b3 preview (hidden_a)</title>
+<style>
+  body{margin:0;background:#141210;overflow:hidden;font-family:"PingFang SC",sans-serif}
+  #labels div{position:absolute;color:#e8d6b8;font-size:12px;transform:translate(-50%,0);white-space:nowrap;text-shadow:0 1px 2px #000;text-align:center}
+  #err{position:absolute;left:0;top:0;color:#f66;font:12px monospace;white-space:pre;z-index:9}
+</style>
+<script type="importmap">{"imports":{"three":"../vendor/three/three.module.js","three/addons/":"../vendor/three/addons/"}}</script>
+</head><body><div id="labels"></div><div id="err"></div>
+<script>
+  window.addEventListener('error', e => { document.getElementById('err').textContent += (e.message || e) + ' @' + e.filename + ':' + e.lineno + '\n'; });
+  window.addEventListener('unhandledrejection', e => { document.getElementById('err').textContent += 'REJ ' + (e.reason && e.reason.stack || e.reason) + '\n'; });
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { FORMS } from '../src/swords/hidden_a.js';
+const q = new URLSearchParams(location.search);
+const ids = (q.get('ids') || Object.keys(FORMS).join(',')).split(',').map(Number).filter(i => FORMS[i]);
+const tilt = +(q.get('tilt') ?? 20) * Math.PI / 180;
+const t0 = +(q.get('t') ?? 0.7);
+const W = innerWidth, H = innerHeight;
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(W, H); renderer.setPixelRatio(1);
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.15;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1c1a1e);
+const cols = +(q.get('cols') || Math.min(ids.length, 6));
+const rows = Math.ceil(ids.length / cols);
+const err = document.getElementById('err');
+const built = [];
+for (const id of ids) {
+  try { built.push({ id, s: FORMS[id]({ level: 10 }) }); } catch (e) { err.textContent += id + ': ' + e.stack + '\n'; }
+}
+const maxW = Math.max(...built.map(b => b.s.userData.width)), maxL = Math.max(...built.map(b => b.s.userData.length));
+const cellX = +(q.get('cx') || maxW + 0.08), cellZ = +(q.get('cz') || maxL + 0.15);
+const items = [];
+built.forEach(({ id, s }, i) => {
+  const col = i % cols, row = Math.floor(i / cols);
+  // 屏幕：剑尖朝上（+X 朝屏幕上方），图右 = +Z
+  s.position.set(-(row - (rows - 1) / 2) * cellZ - (s.userData.bladeLength - s.userData.gripLength) / 2, 0, (col - (cols - 1) / 2) * cellX);
+  scene.add(s);
+  let tris = 0, meshes = 0; s.traverse(o => { if (o.isMesh) { meshes++; tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; } });
+  items.push({ id, s, tris, meshes });
+});
+// 相机：从上方看（-Y），up = +X；向剑柄方向倾斜 tilt
+const spanW = cols * cellX, spanH = rows * cellZ + 0.15;
+const aspect = W / H;
+let hw = spanW / 2, hh = spanH / 2;
+if (hw / hh > aspect) hh = hw / aspect; else hw = hh * aspect;
+const cam = new THREE.OrthographicCamera(-hw, hw, hh, -hh, 0.1, 50);
+cam.up.set(1, 0, 0);
+cam.position.set(-Math.sin(tilt) * 10, Math.cos(tilt) * 10, 0);
+cam.lookAt(0, 0, 0);
+cam.zoom = +(q.get('zoom') || 1); cam.updateProjectionMatrix(); cam.updateMatrixWorld();
+
+scene.add(new THREE.AmbientLight(0x404050, 1.0));
+scene.add(new THREE.HemisphereLight(0x9aa6c0, 0x2a1e18, 1.0));
+const key = new THREE.DirectionalLight(0xffd2a0, 2.4); key.position.set(3, 8, 4); scene.add(key);
+const fill = new THREE.DirectionalLight(0x8fb0ff, 0.9); fill.position.set(-4, 5, -5); scene.add(fill);
+
+const labels = document.getElementById('labels');
+const v = new THREE.Vector3();
+for (const it of items) {
+  const u = it.s.userData;
+  v.set(-u.gripLength - 0.03, 0, it.s.position.z); v.x += it.s.position.x; v.project(cam);
+  const d = document.createElement('div');
+  d.style.left = ((v.x + 1) / 2 * W) + 'px'; d.style.top = ((1 - v.y) / 2 * H) + 'px';
+  d.innerHTML = `#${it.id} ${Math.round(it.tris)}△ ${it.meshes}m<br>L${u.length.toFixed(2)} W${u.width.toFixed(2)} T${u.thickness.toFixed(2)}`;
+  labels.appendChild(d);
+}
+window.__info = items.map(it => ({ id: it.id, tris: Math.round(it.tris), ...Object.fromEntries(['length', 'bladeLength', 'gripLength', 'width', 'thickness'].map(k => [k, +it.s.userData[k].toFixed(3)])) }));
+console.log(JSON.stringify(window.__info));
+let composer = null;
+if (q.get('bloom') !== '0') {
+  composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, cam));
+  composer.addPass(new UnrealBloomPass(new THREE.Vector2(W, H), +(q.get('bloom') || 0.45), 0.45, 0.85));
+  composer.addPass(new OutputPass());
+}
+function frame(t) {
+  for (const it of items) it.s.userData.update && it.s.userData.update(0.016, t);
+  if (composer) composer.render(); else renderer.render(scene, cam);
+}
+frame(t0);
+const clock = new THREE.Clock();
+if (!q.has('still')) renderer.setAnimationLoop(() => frame(t0 + clock.getElapsedTime()));
+</script>
+</body></html>

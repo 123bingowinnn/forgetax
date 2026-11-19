@@ -1,0 +1,46 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>
+<script>addEventListener("error",e=>document.documentElement.dataset.err=e.message);addEventListener("unhandledrejection",e=>document.documentElement.dataset.err="rej "+(e.reason&&e.reason.message||e.reason));</script>
+<script type="module">
+// 用 OfflineAudioContext 离线渲染各个声音，统计峰值/RMS，并导出 wav（tools/audiotest.html#dl 自动下载）
+const SR = 22050, LEN = 26;
+class Off extends OfflineAudioContext {
+  constructor() { super(2, SR * LEN, SR); }
+  resume() { return Promise.resolve(); }
+}
+window.AudioContext = Off;
+document.documentElement.dataset.stage='0';
+const { default: A } = await import('../src/audio.js');
+document.documentElement.dataset.stage='1';
+A.resume();
+A.update(-1, 0, 0, {});
+const at = (sec, fn) => { const keep = A.__delayBase; fn(sec); };
+// 用 delay 选项无法统一偏移，所以按段落在离线时间轴上 suspend 后触发
+const C = A.ctx;
+const plan = [
+  [0.5, 'hit success', () => A.hit('success')], [2, 'hit great', () => A.hit('great')], [4, 'damage', () => A.hit('damage')],
+  [5.5, 'break', () => A.hit('break')], [8, 'heat', () => A.heat()], [10, 'roar', () => A.roar()], [13.5, 'growl', () => A.growl()],
+  [16, 'dragonSay', () => { for (let i = 0; i < 8; i++) setTimeout(() => {}, 0); '让我看看这把剑'.split('').forEach((ch, i) => A.dragonSyllable(ch, i)); }],
+  [17.5, 'bell', () => A.servicebell()], [19.5, 'vend', () => A.vend()], [21, 'crunch', () => A.crunch()], [23.5, 'frenzy', () => A.frenzy()],
+];
+for (const [t, , fn] of plan) { A.at = t; try { fn(); } catch (e) { document.documentElement.dataset.err = (document.documentElement.dataset.err || '') + ' ' + t + ':' + e.message; } }
+A.at = 0;
+document.documentElement.dataset.stage='2:'+(C&&C.constructor.name);
+const buf = await C.startRendering();
+document.documentElement.dataset.stage='3';
+const d0 = buf.getChannelData(0), d1 = buf.getChannelData(1);
+const seg = (a, b) => { let pk = 0, ss = 0, n = 0; for (let i = a * SR | 0; i < Math.min(d0.length, b * SR | 0); i++) { const v = Math.max(Math.abs(d0[i]), Math.abs(d1[i])); pk = Math.max(pk, v); ss += d0[i] * d0[i]; n++; } return { pk: +pk.toFixed(3), rms: +Math.sqrt(ss / Math.max(1, n)).toFixed(4) }; };
+const res = plan.map(([t, name], i) => [name, seg(t, i + 1 < plan.length ? plan[i + 1][0] : LEN)]);
+res.unshift(['silence/amb 0-0.5', seg(0, 0.5)]);
+document.documentElement.dataset.audio = JSON.stringify(res);
+// 导出 wav
+function wav(b) {
+  const n = b.length, ab = new ArrayBuffer(44 + n * 4), v = new DataView(ab);
+  const w = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  w(0, 'RIFF'); v.setUint32(4, 36 + n * 4, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 2, true);
+  v.setUint32(24, SR, true); v.setUint32(28, SR * 4, true); v.setUint16(32, 4, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 4, true);
+  for (let i = 0; i < n; i++) { v.setInt16(44 + i * 4, Math.max(-1, Math.min(1, d0[i])) * 32767, true); v.setInt16(46 + i * 4, Math.max(-1, Math.min(1, d1[i])) * 32767, true); }
+  return new Blob([ab], { type: 'audio/wav' });
+}
+window.__wav = wav(buf);
+const fr = new FileReader(); fr.onload = () => { const pre = document.createElement('pre'); pre.id = 'b64out'; pre.textContent = fr.result.split(',')[1]; document.body.appendChild(pre); document.documentElement.dataset.wav = '1'; }; fr.readAsDataURL(window.__wav);
+</script></body></html>

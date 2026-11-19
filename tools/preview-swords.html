@@ -23,7 +23,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { buildSword, setSwordHeat, setSwordFrenzy, updateSwordFx, breakSword, FORM_IDS, hasForm } from '../src/swords.js';
+import { buildSword, setSwordHeat, setSwordFrenzy, updateSwordFx, breakSword, FORM_IDS, hasForm, VARIANTS, setSwordVariant, setSwordAura } from '../src/swords.js';
 
 const FAM = {
   base: [1, 38, 39, 2, 3, 4, 5, 6, 7], lanes: [2, 3, 4, 5, 6, 7],
@@ -33,6 +33,10 @@ const FAM = {
   tree: [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110],
   fish: [200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210],
   funeral: [3000, 3001, 3002, 3003, 3004, 3005, 3006, 3007, 3008, 3009, 3010],
+  magma: [60, 61, 62, 63, 64, 65], thunder: [70, 71, 72, 73, 74, 75], frost: [50, 51, 52, 53, 54, 55],
+  star: [400, 401, 402, 403, 404, 405, 406, 407, 408, 409, 410],
+  clock: [500, 501, 502, 503, 504, 505, 506, 507, 508, 509, 510],
+  hidden: [60, 61, 62, 63, 64, 65, 70, 71, 72, 73, 74, 75, 50, 51, 52, 53, 54, 55],
   all: FORM_IDS,
 };
 const q = new URLSearchParams(location.search);
@@ -46,19 +50,31 @@ document.body.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x141010);
 
+// 单元格语法：id[:token...]，token = heat | heat5 | frenzy | break | toggle | <品相id> | a0..a3
 let cells;
-if (q.get('ids')) cells = q.get('ids').split(',').map(s => { const [id, fx] = s.split(':'); return { id: +id, fx: fx || '' }; });
+const VIDS = VARIANTS.map(v => v.id);
+if (q.get('vgrid')) cells = q.get('vgrid').split(',').flatMap(id => VIDS.map(v => ({ id: +id, fx: v })));
+else if (q.get('agrid')) cells = q.get('agrid').split(',').flatMap(id => [0, 1, 2, 3].map(a => ({ id: +id, fx: (q.get('variant') ? q.get('variant') + ':' : '') + 'a' + a })));
+else if (q.get('ids')) cells = q.get('ids').split(',').map(s => { const [id, ...fx] = s.split(':'); return { id: +id, fx: fx.join(':') }; });
 else cells = (FAM[q.get('family') || 'base'] || FAM.base).map(id => ({ id, fx: '' }));
 const cmp = !!q.get('cmp');
 
 // 先构建，测量尺寸后排版
 const items = cells.map(c => {
   const s = buildSword(c.id, { level: +(q.get('level') || 0) });
+  const toks = c.fx ? c.fx.split(':') : [];
+  const gv = q.get('variant'), ga = q.get('aura');
+  const vt = toks.find(t => VIDS.includes(t)) || gv;
+  if (vt) setSwordVariant(s, vt);
+  const at = toks.find(t => /^a[0-3]$/.test(t));
+  const aura = at ? +at[1] : (ga ? +ga : 0);
+  if (aura) setSwordAura(s, aura);
+  c.fx = toks.filter(t => !VIDS.includes(t) && !/^a[0-3]$/.test(t)).join(':');
   if (c.fx === 'heat') setSwordHeat(s, 1);
   if (c.fx === 'heat5') setSwordHeat(s, 0.5);
   if (c.fx === 'frenzy') setSwordFrenzy(s, true);
   if (c.fx === 'toggle') { setSwordHeat(s, 1); setSwordFrenzy(s, true); setSwordHeat(s, 0.4); setSwordFrenzy(s, false); setSwordHeat(s, 0); }
-  let note = c.fx;
+  let note = [vt && vt !== 'plain' ? vt : (toks.includes('plain') ? 'plain' : ''), aura ? 'aura' + aura : (at ? 'aura0' : ''), c.fx].filter(Boolean).join(' ');
   if (c.fx === 'break') {
     const parts = breakSword(s);
     s.children[0].visible = false;
@@ -68,7 +84,7 @@ const items = cells.map(c => {
   return { s, c, note };
 });
 const n = items.length;
-const cols = +(q.get('cols') || Math.min(n, n <= 4 ? n : n <= 9 ? (n <= 6 ? 3 : 5) : 6));
+const cols = +(q.get('cols') || (q.get('vgrid') ? 8 : q.get('agrid') ? 4 : Math.min(n, n <= 4 ? n : n <= 9 ? (n <= 6 ? 3 : 5) : 6)));
 const rows = Math.ceil(n / cols);
 let cw = 0, chh = 0;
 for (const it of items) { const u = it.s.userData; cw = Math.max(cw, u.width); chh = Math.max(chh, u.length); }

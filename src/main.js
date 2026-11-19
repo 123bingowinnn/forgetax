@@ -5,6 +5,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 import * as D from './data.js';
 import * as G from './game.js';
@@ -31,17 +32,14 @@ const canvas = $('#c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: DEBUG });
 // 画质：high / mid / low（移动端默认按设备性能自动选择）
 const QUALITY = {
-  high: { pr: 1.75, shadow: true, soft: true, map: 1024, bloom: true },
-  mid:  { pr: 1.35, shadow: true, soft: false, map: 512, bloom: true },
-  low:  { pr: 1.0,  shadow: false, soft: false, map: 512, bloom: false },
+  high: { pr: 2.5, shadow: true, soft: true, map: 1024, bloom: true },
+  mid:  { pr: 2.0, shadow: true, soft: false, map: 1024, bloom: true },
+  low:  { pr: 1.5, shadow: false, soft: false, map: 512, bloom: false },
 };
 function autoQuality() {
   if (!IS_TOUCH) return 'high';
-  const cores = navigator.hardwareConcurrency || 4, mem = navigator.deviceMemory || 4;
-  const px = Math.max(screen.width, screen.height) * (window.devicePixelRatio || 1);
-  if (cores <= 4 || mem <= 3) return 'low';
-  if (px > 2600 && cores >= 8) return 'mid';
-  return 'mid';
+  const mem = navigator.deviceMemory || 4;
+  return mem <= 2 ? 'low' : 'mid';   // 手机默认「均衡」：2 倍分辨率；真卡了 autoPerf 会再降
 }
 let qualityKey = (() => { try { return JSON.parse(localStorage.getItem('forgetax3d.meta.v3') || '{}').quality || autoQuality(); } catch (e) { return autoQuality(); } })();
 let Q = QUALITY[qualityKey] || QUALITY.mid;
@@ -50,18 +48,40 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = Q.shadow;
 renderer.shadowMap.type = Q.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.15;
+renderer.toneMappingExposure = 1.05;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x040302);
 scene.fog = new THREE.Fog(0x050403, 5, 14);
+// 环境反射：原作（Unity URP）的金属、剑身都有柔和的反射高光，这是「质感」的主要来源
+{
+  const pm = new THREE.PMREMGenerator(renderer);
+  const env = pm.fromScene(new RoomEnvironment(), 0.04).texture;
+  window.__envMap = env;
+  pm.dispose();
+}
+// 只给剑、铁砧、锤子这类金属/打磨表面加反射（墙和木头保持哑光，避免整体发灰）
+const ENV = () => window.__envMap;
+function applyEnv(root, k = 1) {
+  root.traverse(o => {
+    if (!o.isMesh || !o.material) return;
+    (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => {
+      if (!m.isMeshStandardMaterial || m.userData.envDone) return;
+      if (m.transparent && m.opacity < 0.5) return;
+      m.envMap = ENV();
+      m.envMapIntensity = k * (0.06 + Math.pow(1 - m.roughness, 2) * 0.7 + m.metalness * 0.5);
+      m.userData.envDone = true;
+      m.needsUpdate = true;
+    });
+  });
+}
 const camera = new THREE.PerspectiveCamera(68, innerWidth / innerHeight, 0.03, 60);
 scene.add(camera);
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.55, 0.45, 0.82);
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.42, 0.4, 0.9);
 bloom.enabled = Q.bloom;
 composer.addPass(bloom);
 const grade = new ShaderPass({
@@ -75,10 +95,14 @@ const grade = new ShaderPass({
       vec4 c = texture2D(tDiffuse, vUv);
       vec3 col = c.rgb;
       float l = dot(col, vec3(0.299,0.587,0.114));
+      // 原作的色调：暖但克制——降低饱和、压暗中间调、提一点对比
+      col = mix(vec3(l), col, 0.82);
+      col = pow(max(col, 0.0), vec3(1.08));
+      l = dot(col, vec3(0.299,0.587,0.114));
       col = mix(col, col * tint * 1.25 + tint * 0.05 * l, tintAmt);
       col = mix(col, vec3(l * 1.4, l * 0.15, l * 0.1) + vec3(0.12,0.0,0.0), red);
-      vec2 d = vUv - 0.5; float v = smoothstep(0.85, 0.25, length(d * vec2(1.1, 1.0)));
-      col *= mix(1.0, v, 0.55 * vig);
+      vec2 d = vUv - 0.5; float v = smoothstep(0.82, 0.18, length(d * vec2(1.05, 1.0)));
+      col *= mix(1.0, v, 0.75 * vig);
       col += (hash(vUv * 900.0 + time) - 0.5) * 0.025;
       gl_FragColor = vec4(col, c.a);
     }`,
@@ -86,15 +110,19 @@ const grade = new ShaderPass({
 composer.addPass(grade);
 composer.addPass(new OutputPass());
 
+// 品相：只做材质的色调变化，去掉过强的自发光/边缘光（避免廉价的霓虹感）
+(SW.VARIANTS || []).forEach(v => { if (v.rimI) v.rimI *= 0.18; if (v.ei) v.ei *= 0.35; });
+
 /* ======================= 世界 ======================= */
 const W = buildWorld(scene);
+applyEnv(W.anvil, 0.35); applyEnv(W.hammer, 0.5);
 const player = new Player(camera, canvas, W.room, W.colliders);
 player.onStep = () => SFX.step();
 const sparks = new Sparks(scene);
 sparks.setScale(innerHeight);
 const shards = new Shards(scene);
 const raycaster = new THREE.Raycaster();
-raycaster.far = 2.6;
+raycaster.far = IS_TOUCH ? 9 : 3.2;   // 触屏：远处的东西也能直接点
 
 // 竖屏时加大垂直视角，保证水平视野；固定机位（铁砧/铁栏）往后拉
 function fitFov() {
@@ -106,8 +134,9 @@ function fitFov() {
 }
 player.adjustFixed = (pos, look) => {
   const a = innerWidth / innerHeight;
-  if (a >= 1.2) return pos;
-  const back = Math.min(0.75, (1.2 / a - 1) * 0.45);
+  if (a >= 1.2 && a <= 1.85) return pos;
+  // 竖屏：后退以容纳宽度；超宽横屏（手机横屏）：后退一点看全铁砧上的剑
+  const back = a > 1.85 ? Math.min(0.35, (a - 1.85) * 0.45) : Math.min(0.75, (1.2 / a - 1) * 0.45);
   const dir = pos.clone().sub(look); dir.y = 0; dir.normalize();
   return pos.clone().addScaledVector(dir, back);
 };
@@ -207,6 +236,27 @@ function toast(msg, err) {
 }
 
 let subT = null;
+/* 巨龙的对白：逐字出现，每个字伴随低沉的喉音（原作里巨龙会开口说话） */
+let sayTimer = null, sayHide = null;
+function dragonSay(text, ms) {
+  const el = $('#dialog');
+  if (!el) return;
+  clearInterval(sayTimer); clearTimeout(sayHide);
+  text = touchText(text);
+  el.innerHTML = '<div class="dl-who">巨龙</div><div class="dl-text"></div>';
+  el.classList.add('show');
+  const tx = el.querySelector('.dl-text');
+  let i = 0;
+  sayTimer = setInterval(() => {
+    if (i >= text.length) { clearInterval(sayTimer); sayHide = setTimeout(() => el.classList.remove('show'), ms || (1600 + text.length * 70)); return; }
+    const ch = text[i];
+    tx.textContent += ch;
+    if (i % 2 === 0) SFX.dragonSyllable(ch, i);
+    i++;
+  }, 62);
+}
+const pick = a => a[Math.floor(Math.random() * a.length)];
+
 function subtitle(text, ms = 2600) {
   const el = $('#subtitle');
   el.textContent = touchText(text); el.classList.add('show');
@@ -235,7 +285,9 @@ function floaterAt(world, text, color, size = 40) {
 }
 
 const procMap = new Map();
+let lastPop = 0;
 function showProc(id, text, kind = 'relic') {
+  if (performance.now() - lastPop > 120) { lastPop = performance.now(); SFX.relicPop(); }
   const box = $('#procs');
   let p = procMap.get(id);
   if (!p) {
@@ -325,6 +377,8 @@ function getSwordObj(s) {
   const key = swordKey(s);
   if (!o || o.key !== key) {
     const g = SW.buildSword(key, { level: s.level });
+    applyEnv(g, 1);
+    if (SW.setSwordVariant && s.variant && s.variant !== 'plain') { try { SW.setSwordVariant(g, s.variant); } catch (e) { console.warn(e); } }
     g.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
     g.userData.interact = { kind: 'sword', id: s.id };
     if (o) { o.group.parent && o.group.parent.remove(o.group); }
@@ -398,6 +452,8 @@ function syncSwords() {
     if (o.heat !== heat && !o.heating) { SW.setSwordHeat(g, heat); o.heat = heat; }
     const fr = G.isFrenzyFor(st, s);
     if (o.frenzy !== fr) { SW.setSwordFrenzy(g, fr); o.frenzy = fr; }
+    const aura = Math.max(s.level, s.peak || 0) >= 20 ? 1 : 0;   // 原作没有光环：只在 +20 给一点点微光
+    if (SW.setSwordAura && o.aura !== aura) { try { SW.setSwordAura(g, aura); } catch (e) { console.warn(e); } o.aura = aura; }
   }
 }
 
@@ -405,7 +461,7 @@ function syncSwords() {
 function drawMiniPanel(vm) {
   const el = $('#miniPanel');
   if (!el) return;
-  const need = IS_TOUCH && phase === 'anvil' && (innerWidth < innerHeight * 1.2 || innerWidth < 700);
+  const need = IS_TOUCH && phase === 'anvil' && innerWidth < innerHeight * 0.9;
   el.classList.toggle('hidden', !need);
   if (!need) return;
   const last = vm.last ? `<span style="color:${D.OUTCOMES[vm.last.outcome].color}">${D.OUTCOMES[vm.last.outcome].name} · ${vm.last.ratio >= 10 ? vm.last.ratio.toFixed(0) : vm.last.ratio.toFixed(2).replace(/\.?0+$/, '')}倍</span>` : '';
@@ -613,7 +669,7 @@ function describe(t) {
     case 'vendRefresh': {
       if (st.vend.gift) return { title: '刷新按钮', sub: '第一天的赠品不能刷新' };
       const c = G.refreshCost(st);
-      return { title: '刷新货架', sub: c === 0 ? '旧代金券：今天免费刷新一次' : `花费 ${fmt(c)} 金币，换一批遗物（每次刷新更贵）`, act: [['E', '刷新']], fn: () => { const r = G.refreshVend(st, meta); if (r.error) return toast(r.error, true); SFX.vend(); W.vending.userData.pressRefresh && W.vending.userData.pressRefresh(); changed(); } };
+      return { title: '刷新货架', sub: c === 0 ? '旧代金券：今天免费刷新一次' : `花费 ${fmt(c)} 金币，换一批遗物（每次刷新更贵）`, act: [['E', '刷新']], fn: () => { const r = G.refreshVend(st, meta); if (r.error) return toast(r.error, true); SFX.refresh(); W.vending.userData.pressRefresh && W.vending.userData.pressRefresh(); changed(); } };
     }
     case 'ghostItem': {
       const it = st.ghost && st.ghost.offers[d.index];
@@ -651,6 +707,7 @@ function updatePrompt() {
 }
 
 function changed() {
+  if (st && st.swords.some(s => s.variant === 'holy')) grantAch(['holy_v']);
   if (phase !== 'anvil' && $('#miniPanel')) $('#miniPanel').classList.add('hidden');
   syncSwords();
   syncBoards();
@@ -690,7 +747,7 @@ function placeOnAnvil() {
   enterAnvil();
 }
 
-const ANVIL_CAM = { pos: new THREE.Vector3(0.0, 1.62, 1.28), look: new THREE.Vector3(0.02, 1.32, 2.95) };
+const ANVIL_CAM = { pos: new THREE.Vector3(0.02, 1.56, 1.58), look: new THREE.Vector3(-0.02, 1.24, 2.95) };
 function enterAnvil() {
   phase = 'busy';
   updatePrompt();
@@ -804,14 +861,17 @@ function buyGhost(idx) {
 }
 
 /* ---------- 锻造 ---------- */
-// 求让锤面落在剑面（或砧面）上的 hammerRig 转角
+// 求让锤面落在剑面（或砧面）上的 hammerRig 转角（rig 在击打位置时）
+const HAMMER_STRIKE_POS = new THREE.Vector3(-0.9, 1.2, 2.32);
+const HAMMER_REST_POS = new THREE.Vector3(-1.45, 1.05, 1.85);   // 锻造时锤子收在画面右侧外（原作：面板与剑不被遮挡）
 function hammerStrikeAngle(onSword = true) {
   const rig = W.hammerRig, h = W.hammer;
   const face = h.userData.face ? h.userData.face.clone() : new THREE.Vector3(-0.21, 0.8, 0);
   const s = st && G.anvilSword(st);
   const o = s && swordObjs.get(s.id);
-  const top = (W.anvil.userData.topY || 0.95) + (onSword && o ? 0.02 + (o.group.userData.thickness || 0.03) * 0.9 : 0.005);
-  const keep = rig.rotation.z;
+  const top = (W.anvil.userData.topY || 0.95) + (onSword && o ? 0.02 + (o.group.userData.thickness || 0.03) * 0.9 * o.group.scale.x : 0.005);
+  const keepA = rig.rotation.z, keepP = rig.position.clone();
+  rig.position.copy(HAMMER_STRIKE_POS);
   let best = 0, err = 1e9;
   for (let a = -0.5; a <= 0.6; a += 0.004) {
     rig.rotation.z = a; rig.updateMatrixWorld(true);
@@ -819,15 +879,17 @@ function hammerStrikeAngle(onSword = true) {
     const e = Math.abs(p.y - top);
     if (e < err) { err = e; best = a; }
   }
-  rig.rotation.z = keep;
+  rig.rotation.z = keepA; rig.position.copy(keepP); rig.updateMatrixWorld(true);
   return best;
 }
-const HAMMER_RAISE = 0.17;
+const HAMMER_RAISE = 0.9;
 let hammerRestA = null;
+let hammerBlend = 1;   // 0 = 收起（锻造视角下在画外），1 = 在铁砧上
+function anvilView() { return phase === 'anvil' || (phase === 'busy' && player.mode !== 'walk' && !!(st && G.anvilSword(st))); }
 function hammerRest() {
-  if (phase === 'anvil' || (phase === 'busy' && player.mode !== 'walk')) {
+  if (anvilView()) {
     if (hammerRestA === null) hammerRestA = hammerStrikeAngle(true) + HAMMER_RAISE;
-    return hammerRestA + Math.sin(performance.now() / 700) * 0.01;
+    return hammerRestA;
   }
   hammerRestA = null;
   return hammerStrikeAngle(false);
@@ -840,7 +902,7 @@ function doHammer() {
   if (!s.heated) { toast('剑是冷的。先去熔炉把它烧红', true); return; }
   const fr = G.isFrenzyFor(st, s) || s.charge >= D.FRENZY_CHARGE;
   const strike = hammerStrikeAngle(true);
-  hammerAnim = { t: 0, phase: 'down', strike, down: fr ? 0.09 : 0.12, up: fr ? 0.18 : 0.28, from: W.hammerRig.rotation.z };
+  hammerAnim = { t: 0, phase: 'down', strike, down: fr ? 0.1 : 0.14, up: fr ? 0.18 : 0.26, from: W.hammerRig.rotation.z, fromBlend: hammerBlend };
 }
 
 function resolveHit() {
@@ -864,7 +926,7 @@ function resolveHit() {
   flash(res.outcome === 'break' ? '#ff4030' : res.outcome === 'great' ? '#e2b0ff' : '#ffd9a0', { break: 0.5, great: 0.35, success: 0.12, damage: 0.15, hold: 0.06 }[res.outcome]);
 
   // 结果浮字（面板下方，如「大成功 · 2.5倍」）
-  const panelBottom = new THREE.Vector3(-0.22, 1.72 - 0.4, 2.9);
+  const panelBottom = new THREE.Vector3(-0.18, 1.5 - 0.5, 2.9);
   if (res.broke) floaterAt(panelBottom, '破坏', oc.color, 46);
   else {
     const r = res.ratio;
@@ -883,6 +945,7 @@ function resolveHit() {
     const g = o.group;
     g.updateMatrixWorld(true);
     let pieces = [];
+    if (SW.setSwordAura) { try { SW.setSwordAura(g, 0); } catch (e) { } }
     try { pieces = SW.breakSword(g) || []; } catch (e) { console.warn(e); }
     shards.spawn(pieces, g.matrixWorld, impact);
     scene.remove(g); swordObjs.delete(res.swordId);
@@ -895,7 +958,7 @@ function resolveHit() {
     // 进化！
     setTimeout(() => {
       SFX.unlock(); flash('#fff4d0', 0.45);
-      banner('进化', false);
+      banner('进化', false); SFX.evolve();
       subtitle('「' + D.FORM_NAMES[formBefore] + '」进化成了「' + D.FORM_NAMES[res.form] + '」', 3000);
       const ob = s && swordObjs.get(s.id);
       if (ob) { ob.group.getWorldPosition(tmpV); sparks.burst(tmpV, 120, 0xfff0c0, { power: 1.2, floor: 0.97 }); }
@@ -907,21 +970,30 @@ function resolveHit() {
 
 function updateHammer(dt) {
   const rig = W.hammerRig;
-  if (!hammerAnim) { rig.rotation.z += (hammerRest() - rig.rotation.z) * Math.min(1, dt * 9); return; }
-  const a = hammerAnim;
-  a.t += dt;
-  if (a.phase === 'down') {
-    const k = Math.min(1, a.t / a.down);
-    rig.rotation.z = a.from + (a.strike - a.from) * k * k * k;
-    if (k >= 1) { a.phase = 'up'; a.t = 0; resolveHit(); }
+  if (!hammerAnim) {
+    const target = anvilView() ? 0 : 1;
+    hammerBlend += (target - hammerBlend) * Math.min(1, dt * 10);
+    rig.rotation.z += (hammerRest() - rig.rotation.z) * Math.min(1, dt * 10);
   } else {
-    const k = Math.min(1, a.t / a.up);
-    const e = 1 - Math.pow(1 - k, 3);
-    const rest = hammerRestA !== null ? hammerRestA : a.strike + HAMMER_RAISE;
-    rig.rotation.z = a.strike + (rest - a.strike) * e;
-    if (k >= 1) hammerAnim = null;
-    else if (k > 0.55 && queuedHit) { hammerAnim = null; queuedHit = false; doHammer(); }
+    const a = hammerAnim;
+    a.t += dt;
+    if (a.phase === 'down') {
+      const k = Math.min(1, a.t / a.down);
+      const e = k * k * k;
+      rig.rotation.z = a.from + (a.strike - a.from) * e;
+      hammerBlend = a.fromBlend + (1 - a.fromBlend) * Math.min(1, k * 1.4);
+      if (k >= 1) { a.phase = 'up'; a.t = 0; hammerBlend = 1; resolveHit(); }
+    } else {
+      const k = Math.min(1, a.t / a.up);
+      const e = 1 - Math.pow(1 - k, 3);
+      const rest = hammerRestA !== null ? hammerRestA : a.strike + HAMMER_RAISE;
+      rig.rotation.z = a.strike + (rest - a.strike) * e;
+      hammerBlend = 1 - e;
+      if (k >= 1) hammerAnim = null;
+      else if (k > 0.45 && queuedHit) { hammerAnim = null; queuedHit = false; doHammer(); }
+    }
   }
+  rig.position.lerpVectors(HAMMER_REST_POS, HAMMER_STRIKE_POS, hammerBlend);
 }
 let queuedHit = false;
 
@@ -1037,10 +1109,11 @@ function showTutStep() {
   const s = tutStep();
   const box = $('#tutorial');
   if (!s) { box.classList.add('hidden'); tutMarker.visible = false; return; }
-  box.innerHTML = touchText(`<div class="tu-who">巨龙</div><div class="tu-say">“${esc(s.say)}”</div><div class="tu-hint">▸ ${esc(s.hint)}</div><div class="tu-skip">${tut.i + 1}/${D.TUTORIAL.length} · P 跳过引导</div>`);
+  box.innerHTML = touchText(`<div class="tu-hint">▸ ${esc(s.hint)}</div><div class="tu-skip">${tut.i + 1}/${D.TUTORIAL.length} · P 跳过引导</div>`);
   box.classList.remove('hidden');
   box.style.animation = 'none'; void box.offsetWidth; box.style.animation = '';
-  SFX.roar && tut.i === 0 && setTimeout(() => SFX.click(), 10);
+  if (tut.i === 0) SFX.dragonBreath(0.8);
+  setTimeout(() => dragonSay(s.say, 4200), tut.i === 0 ? 900 : 200);
 }
 function tutorialEvent(ev) {
   if (!tut) return;
@@ -1094,9 +1167,13 @@ function ringBell() {
   player.goFixed(CAGE_CAM.pos, CAGE_CAM.look, 0.7, async () => {
     const eye = W.cage.userData;
     eye.setEyeState && eye.setEyeState('watch');
+    dragonAwake = true;
+    SFX.duck(0.25, 9); SFX.dragonEye(); SFX.dragonBreath(1.2);
     const q = G.quota(st), tot = G.altarTotal(st);
-    subtitle(tot >= q ? '让我看看……' : '就这些？', 2000);
-    await wait(1600);
+    await wait(900);
+    dragonSay(tot >= q * 3 ? '哦？' : tot >= q ? '让我看看……' : pick(['就这些？', '……你在耍我吗，铁匠。']), 1600);
+    await wait(1400);
+    SFX.crunch();
     const offered = G.altarSwords(st).map(s => swordObjs.get(s.id)).filter(Boolean);
     offered.forEach(o => { o.detached = true; scene.attach(o.group); });
     const t0 = performance.now();
@@ -1114,13 +1191,15 @@ function ringBell() {
     meta.bestDay = Math.max(meta.bestDay || 0, res.day); saveMeta();
     if (res.ok) {
       eye.setEyeState && eye.setEyeState('happy');
-      SFX.coin();
-      subtitle(`巨龙收下了贡品。${fmt(res.gold)} G 化作金币回到了你手里。` + (res.creditGain ? '（税务计数板 +1 剑币）' : ''), 3200);
+      SFX.content(); setTimeout(() => SFX.coin(), 700);
+      dragonSay(res.total >= res.quota * 3 ? '哼。今天你倒是挺勤快。' : pick(['……够了。回你的铁砧去。', '还算识相。', '明天，我要更多。', '嗯。滚吧。']), 2200);
+      setTimeout(() => subtitle(`${fmt(res.gold)} G 化作金币回到了你手里。` + (res.creditGain ? '（税务计数板 +1 剑币）' : ''), 2600), 1200);
     } else {
       eye.setEyeState && eye.setEyeState('angry');
       SFX.roar(); shakeAmt = 0.06; flash('#ff3020', 0.35);
-      if (res.pardoned) subtitle('……巨龙的赦免碎了。它这次放过了你。', 3600);
-      else subtitle(res.over === 'dead' ? '巨龙已经没有耐心了。' : `贡品不足。铁栏后的庞然大物失去了一些耐心……（怒气 ${res.rage}/${res.rageMax}）`, 3600);
+      if (res.pardoned) { dragonSay('……这一次，我放过你。', 2400); setTimeout(() => subtitle('巨龙的赦免碎了。', 2400), 1400); }
+      else if (res.over === 'dead') dragonSay('你的时间到了，铁匠。', 2600);
+      else { dragonSay(res.rage >= 2 ? '下一次，你就是贡品。' : '我的耐心是有限的。', 2400); setTimeout(() => subtitle(`铁栏后的庞然大物失去了一些耐心……（怒气 ${res.rage}/${res.rageMax}）`, 3000), 1500); }
     }
     changed();
     await wait(2800);
@@ -1137,6 +1216,7 @@ async function nextDay(ok) {
   await wait(700);
   const r = G.startNextDay(st, meta);
   W.cage.userData.setEyeState && W.cage.userData.setEyeState('hidden');
+  dragonAwake = false; seenToday = {};
   player.mode = 'walk'; player.trans = null;
   player.setPose(new THREE.Vector3(0, 1.62, 1.2), Math.PI, -0.1);
   changed();
@@ -1145,10 +1225,10 @@ async function nextDay(ok) {
   phase = 'play';
   changed();
   banner(D.dateStr(st.day));
-  if (W.hatch && W.hatch.userData.setOpen) { W.hatch.userData.setOpen(true); SFX.putdown(); setTimeout(() => W.hatch.userData.setOpen(false), 3500); }
-  if (ok === false) { shakeAmt = 0.03; setTimeout(() => toast(`巨龙把今天的 ${r.newSwords} 把剑扔进了屋里（在剑架前的地上）`), 900); }
+  if (W.hatch && W.hatch.userData.setOpen && ok !== false) { W.hatch.userData.setOpen(true); SFX.hatch(); setTimeout(() => W.hatch.userData.setOpen(false), 3500); }
+  if (ok === false) { shakeAmt = 0.03; SFX.thrown(); setTimeout(() => toast(`巨龙把今天的 ${r.newSwords} 把剑扔进了屋里（在剑架前的地上）`), 900); }
   else setTimeout(() => toast(`送来了 ${r.newSwords} 把新剑 · 今日贡额 ${fmt(G.quota(st))} G`), 900);
-  if (st.ghost) setTimeout(() => subtitle('有个幽灵飘进了工坊……它在熔炉旁边摆起了摊。'), 2000);
+  if (st.ghost) setTimeout(() => { SFX.ghost(); subtitle('有个幽灵飘进了工坊……它在熔炉旁边摆起了摊。'); }, 2000);
   if (st.day === 2 && tut) endTutorial();
 }
 
@@ -1223,7 +1303,7 @@ function showHelp() {
     <tr><th style="color:var(--success)">成功</th><td>+1 级，剑值 ×1.5。</td></tr>
     <tr><th style="color:var(--great)">大成功</th><td>+2 级，剑值 ×2.5（比两次成功的 ×2.25 更多，且永久保留）。</td></tr></table>
     <h3>入神</h3><p>同一把剑每锤 +1 充能，满 10 格后下一锤进入入神：4 秒内没有破碎签，尽情连击。</p>
-    <h3>剑的进化</h3><p>+2、+4 换形；+6 起按送货时的投放线分为厚铁、怒铁、魔力三条；+10 起由投放线与一个隐藏分支决定六大家族（城塞剑/圣剑/锯刃/龙牙/符文剑/分裂剑），此后每 2 级进化一次，直到 +20 的终极形态。幽灵商人还卖世界树、鱼刃、葬仪剑三条特殊剑线。把一个家族锻到 +20 会解锁它的传说遗物。</p>
+    <h3>剑的进化</h3><p>+2、+4 换形；+6 起按送货时的投放线分为厚铁、怒铁、魔力三条；+10 起由投放线与一个隐藏分支决定六大家族（城塞剑/圣剑/锯刃/龙牙/符文剑/分裂剑），此后每 2 级进化一次，直到 +20 的终极形态。另有约 16% 的剑会走进<b>隐藏家族</b>（熔岩巨剑/雷霆剑/冰霜剑）。幽灵商人还卖世界树、鱼刃、葬仪剑、星辰剑、机关剑五条特殊剑线。每把剑还有随机<b>品相</b>（赤铜、寒铁、翡翠、黑曜、血钢、鎏金、圣辉），越稀有剑值越高；+10、+14、+18 起剑身会出现越来越强的光环。共 118 种形态。把一个家族锻到 +20 会解锁它的传说遗物。</p>
     <h3>遗物与商人</h3><p>遗物售货机收的不是钱而是剑：任何剑都只算 1 枚剑币。第一天的三件遗物免费任选其一。每天会刷新三件，可以花金币重刷。遗物架只有 8 格。<br>幽灵商人在第 3、6、9……天来访，用金币出售基础剑、特殊剑线和消耗品，同一件商品每多买一个价格 ×3。</p>
   </div><div class="m-foot"><button class="btn primary" data-close>明白了</button></div>`);
 }
@@ -1287,7 +1367,7 @@ function showTitle() {
   const forms = Object.keys(meta.codex).length, ach = Object.keys(meta.ach).length;
   $('#titleStats').textContent = meta.runs ? `契约 ${meta.runs} 次 · 最远 ${D.dateStr(Math.max(1, meta.bestDay || 1))} · 完成 ${meta.wins || 0} 次 · 图鉴 ${forms}/${Object.keys(D.FORM_NAMES).length} · 成就 ${ach}/${D.ACHIEVEMENTS.length}` : '';
   if (!titleSword) {
-    titleSword = SW.buildSword(30, { level: 16 });
+    titleSword = SW.buildSword(30, { level: 16 }); applyEnv(titleSword, 1);
     scene.add(titleSword);
     anvilSwordPose({ group: titleSword });
     SW.setSwordHeat(titleSword, 0.3);
@@ -1356,11 +1436,25 @@ $('#btnHow').onclick = () => { SFX.resume(); showHelp(); };
 $('#btnCodex') && ($('#btnCodex').onclick = () => { SFX.resume(); showCodex(); });
 
 /* ======================= 触屏 ======================= */
+let autoWalk = null;   // { point, fn, t }
 function tapAt(x, y) {
-  const ndc = new THREE.Vector2(x / innerWidth * 2 - 1, -(y / innerHeight) * 2 + 1);
-  const t = findTarget(ndc);
-  const info = describe(t);
-  if (info && info.fn) { target = t; t.info = info; info.fn(); lastPromptKey = ''; }
+  // 先点中心，再在半径 ~30px 内找最近的可交互物（手指比准星粗）
+  const R = Math.max(18, Math.min(40, innerWidth * 0.035));
+  const offs = [[0, 0]];
+  for (const r of [R * 0.5, R]) for (let k = 0; k < 8; k++) offs.push([Math.cos(k * Math.PI / 4) * r, Math.sin(k * Math.PI / 4) * r]);
+  let t = null, info = null;
+  for (const [dx, dy] of offs) {
+    const ndc = new THREE.Vector2((x + dx) / innerWidth * 2 - 1, -((y + dy) / innerHeight) * 2 + 1);
+    const tt = findTarget(ndc);
+    const ii = describe(tt);
+    if (ii) { t = tt; info = ii; if (ii.fn) break; }
+  }
+  if (info && info.fn) {
+    target = t; t.info = info; lastPromptKey = '';
+    const d = t.point ? Math.hypot(t.point.x - player.pos.x, t.point.z - player.pos.z) : 0;
+    if (d > 1.7 && t.point) { autoWalk = { point: t.point.clone(), fn: info.fn, t: 0 }; }   // 走过去再执行
+    else info.fn();
+  }
   else if (info) { const el = $('#prompt'); el.innerHTML = touchText(`<div class="p-title">${info.title}</div>${info.sub ? `<div class="p-sub">${info.sub}</div>` : ''}`); el.classList.remove('hidden'); }
 }
 function hammerTap() {
@@ -1374,14 +1468,18 @@ function showMenu() {
       <button class="btn primary" data-close>继续</button>
       ${fs ? '<button class="btn" id="mFull">全屏</button>' : ''}
       <div class="q-row"><span>画质</span>${['low', 'mid', 'high'].map(k => `<button class="btn ${k === qualityKey ? 'primary' : ''}" data-q="${k}">${{ low: '流畅', mid: '均衡', high: '精美' }[k]}</button>`).join('')}</div>
-      <button class="btn" id="mMute">${meta.muted ? '开启音效' : '关闭音效'}</button>
+      <button class="btn" id="mMute">${meta.muted ? '开启声音' : '关闭声音'}</button>
+      <div class="q-row vol"><span>音乐</span><input type="range" min="0" max="100" value="${Math.round((meta.volMusic ?? 0.5) * 100)}" id="vMusic"></div>
+      <div class="q-row vol"><span>音效</span><input type="range" min="0" max="100" value="${Math.round((meta.volSfx ?? 0.85) * 100)}" id="vSfx"></div>
       <button class="btn" id="mHelp">玩法说明</button>
       <button class="btn" id="mTitle">保存并返回标题</button>
     </div>`, box => {
     const f = box.querySelector('#mFull');
     if (f) f.onclick = () => { const el = document.documentElement; (el.requestFullscreen || el.webkitRequestFullscreen).call(el)?.catch?.(() => {}); closeModal(); };
     box.querySelectorAll('[data-q]').forEach(b => b.onclick = () => { meta.quality = b.dataset.q; saveMeta(); applyQuality(b.dataset.q); showMenu(); });
-    box.querySelector('#mMute').onclick = () => { meta.muted = !meta.muted; SFX.enabled = !meta.muted; saveMeta(); showMenu(); };
+    box.querySelector('#mMute').onclick = () => { meta.muted = !meta.muted; SFX.setEnabled(!meta.muted); saveMeta(); showMenu(); };
+    box.querySelector('#vMusic').oninput = e => { meta.volMusic = e.target.value / 100; SFX.setVolume('music', meta.volMusic); saveMeta(); };
+    box.querySelector('#vSfx').oninput = e => { meta.volSfx = e.target.value / 100; SFX.setVolume('sfx', meta.volSfx); SFX.setVolume('amb', meta.volSfx * 0.8); saveMeta(); };
     box.querySelector('#mHelp').onclick = () => showHelp();
     box.querySelector('#mTitle').onclick = () => { closeModal(); save(); showTitle(); };
   });
@@ -1389,7 +1487,11 @@ function showMenu() {
 const touchUI = initTouch({
   phase: () => phase, modalOpen: () => !$('#modal').classList.contains('hidden') || !$('#relicList').classList.contains('hidden'),
   player, tapAt,
-  act: () => { if (phase === 'play' && target && target.info && target.info.fn) target.info.fn(); },
+  act: () => {
+    if (phase !== 'play' || !target || !target.info || !target.info.fn) return;
+    const d = target.point ? Math.hypot(target.point.x - player.pos.x, target.point.z - player.pos.z) : 0;
+    if (d > 1.7) autoWalk = { point: target.point.clone(), fn: target.info.fn, t: 0 }; else target.info.fn();
+  },
   actX: () => { if (phase === 'play' && target && target.info && target.info.fnX) target.info.fnX(); },
   actInfo: () => (target && target.info) ? { label: target.info.act && target.info.act[0] && target.info.act[0][1], x: !!target.info.fnX } : null,
   hammer: hammerTap, leave: () => leaveAnvil(false), take: () => leaveAnvil(true), useCons: () => useCons(), undo: () => doUndo(),
@@ -1402,6 +1504,62 @@ document.addEventListener('pointerdown', () => SFX.resume(), { passive: true });
 document.addEventListener('keydown', e => { if (e.code === 'Escape' && phase !== 'title' && $('#modal').classList.contains('hidden') && IS_TOUCH) showMenu(); });
 $('#rotateHint') && ($('#rotateHint').querySelector('button').onclick = () => $('#rotateHint').classList.add('hidden'));
 checkOrientation();
+
+function stepAutoWalk(dt) {
+  const a = autoWalk;
+  if (phase !== 'play' || (player.joy.x || player.joy.y)) { autoWalk = null; return; }
+  a.t += dt;
+  const dx = a.point.x - player.pos.x, dz = a.point.z - player.pos.z;
+  const d = Math.hypot(dx, dz);
+  // 视线转向目标
+  const wantYaw = Math.atan2(-dx, -dz);
+  let dy = wantYaw - player.yaw; while (dy > Math.PI) dy -= Math.PI * 2; while (dy < -Math.PI) dy += Math.PI * 2;
+  player.yaw += dy * Math.min(1, dt * 8);
+  if (d > 1.3 && a.t < 2.2) {
+    const sp = Math.min(3.2, d * 3) * dt;
+    const before = player.pos.clone();
+    player.pos.x += dx / d * sp; player.pos.z += dz / d * sp;
+    player.collide(player.pos);
+    player.bobT += dt * 9;
+    if (before.distanceTo(player.pos) < sp * 0.15 && a.t > 0.4) a.t = 99;   // 被挡住了
+    player.applyCamera();
+    return;
+  }
+  autoWalk = null;
+  a.fn();
+}
+
+/* 旁白：第一次看向某些东西时，屏幕下方出现一句内心独白（原作的 HE STILL WANTS HIS CUT. 等） */
+const tmpDir = new THREE.Vector3();
+let dragonAwake = false, seenToday = {};
+const NARRATION = {
+  altar: '他还想要他的那一份。', bell: '敲响它，今天就结束了。',
+  vendWindow: '用一把剑，换一件遗物。', vendSlot: '用一把剑，换一件遗物。',
+  ghostItem: '那个幽灵只收金币。', furnace: '先把剑烧热。',
+};
+function narrate(kind) {
+  const k = kind === 'vendSlot' ? 'vendWindow' : kind;
+  if (!NARRATION[k] || seenToday[k] || tut) return;
+  seenToday[k] = true;
+  if (k === 'furnace' && st && st.day > 1) return;
+  subtitle(NARRATION[k], 2600);
+  if (k === 'ghostItem') SFX.ghost();
+}
+/* 空气中缓缓飘动的灰尘（暖光里可见）——沉静感的主要来源之一 */
+let dustAcc = 0;
+function dust(dt) {
+  if (phase === 'title' || document.hidden) return;
+  dustAcc += dt * (Q.bloom ? 26 : 12);
+  while (dustAcc > 1) {
+    dustAcc--;
+    const p = camera.position;
+    camera.getWorldDirection(tmpDir);
+    const r = 0.6 + Math.random() * 2.6;
+    const a = (Math.random() - 0.5) * 1.6;
+    const fx = tmpDir.x * Math.cos(a) - tmpDir.z * Math.sin(a), fz = tmpDir.x * Math.sin(a) + tmpDir.z * Math.cos(a);
+    sparks.mote(new THREE.Vector3(p.x + fx * r, 0.4 + Math.random() * 2.2, p.z + fz * r));
+  }
+}
 
 /* 自动降画质：移动端连续几秒帧率过低时降一级（玩家手动选过画质则不动） */
 let perfAcc = 0, perfN = 0, perfCool = 6;
@@ -1424,13 +1582,18 @@ function frame() {
   const t = clock.elapsedTime;
   if (st && phase !== 'title') {
     const ended = G.tick(st, dt);
-    if (ended) { toast('入神结束 —— 破碎的风险回来了'); (ended.events || []).forEach(ev => showProc(ev.id, ev.text)); changed(); recordCodex(); }
+    if (ended) { SFX.frenzyEnd(); toast('入神结束 —— 破碎的风险回来了'); (ended.events || []).forEach(ev => showProc(ev.id, ev.text)); changed(); recordCodex(); }
     const fr = st.frenzy.active;
     if (fr !== lastFrenzy) { lastFrenzy = fr; changed(); }
     boardTimer += dt;
     if (fr && boardTimer > 0.1) { boardTimer = 0; syncBoards(); }
   }
   player.update(dt);
+  camera.getWorldDirection(tmpDir);
+  SFX.update(camera.position.x, camera.position.z, Math.atan2(-tmpDir.x, -tmpDir.z), { dragonAwake });
+  if (phase === 'play' && target) narrate(target.data.kind);
+  dust(dt);
+  if (autoWalk) stepAutoWalk(dt);
   if (phase === 'play') updatePrompt(); else target = null;
   touchUI.update();
   autoPerf(dt);
@@ -1478,7 +1641,10 @@ function frame() {
 }
 
 /* ======================= 启动 ======================= */
-SFX.enabled = !meta.muted;
+SFX.vol.music = meta.volMusic ?? 0.5; SFX.vol.sfx = meta.volSfx ?? 0.85; SFX.vol.amb = (meta.volSfx ?? 0.85) * 0.8;
+SFX.setEnabled(!meta.muted);
+SFX.src.furnace = { x: W.room.x0 + 0.3, z: 1.45 };
+SFX.src.dragon = { x: -1.2, z: W.room.z0 - 0.8 };
 showTitle();
 $('#loading').classList.add('hidden');
 composer.render();
@@ -1494,7 +1660,7 @@ window.__ft = {
   tp(x, z) { player.pos.set(x, 1.62, z); player.applyCamera(); },
   pressE() { updatePrompt(); if (target && target.info && target.info.fn) { target.info.fn(); return target.info.title; } return null; },
   updatePrompt, THREE, get target() { return target; }, touchUI: () => touchUI, swordObj: id => swordObjs.get(id) && swordObjs.get(id).group,
-  step(n = 30, dt = 1 / 30) { for (let i = 0; i < n; i++) { player.update(dt); updateHammer(dt); sparks.update(dt); shards.update(dt); W.updaters.forEach(u => u(dt, i * dt)); swordObjs.forEach(o => { if (o.group.userData.update) o.group.userData.update(dt, i * dt); }); if (SW.updateSwordFx) SW.updateSwordFx(i * dt); } if (phase === 'play') updatePrompt(); touchUI.update(); composer.render(); },
+  step(n = 30, dt = 1 / 30) { for (let i = 0; i < n; i++) { if (autoWalk) stepAutoWalk(dt); player.update(dt); updateHammer(dt); sparks.update(dt); shards.update(dt); W.updaters.forEach(u => u(dt, i * dt)); swordObjs.forEach(o => { if (o.group.userData.update) o.group.userData.update(dt, i * dt); }); if (SW.updateSwordFx) SW.updateSwordFx(i * dt); } if (phase === 'play') updatePrompt(); touchUI.update(); composer.render(); },
 };
 
 if (!globalThis.__RELEASE__ && /shot=/.test(location.hash)) import('../tools/scenarios.js');

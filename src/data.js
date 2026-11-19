@@ -49,9 +49,14 @@ export const FAMILIES = {
   dragon:  { name: '龙牙',   lane: 'B', branch: 1, forms: [23, 43, 24, 25, 26, 27] },
   rune:    { name: '符文剑', lane: 'C', branch: 0, forms: [28, 44, 29, 30, 31, 32] },
   split:   { name: '分裂剑', lane: 'C', branch: 1, forms: [33, 45, 34, 35, 36, 37] },
+  magma:   { name: '熔岩巨剑', lane: 'A', hidden: true, forms: [60, 61, 62, 63, 64, 65] },
+  thunder: { name: '雷霆剑',   lane: 'B', hidden: true, forms: [70, 71, 72, 73, 74, 75] },
+  frost:   { name: '冰霜剑',   lane: 'C', hidden: true, forms: [50, 51, 52, 53, 54, 55] },
   tree:    { name: '世界树', special: true, forms: [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110] },
   fish:    { name: '鱼刃',   special: true, forms: [200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210] },
   funeral: { name: '葬仪剑', special: true, forms: [3000, 3001, 3002, 3003, 3004, 3005, 3006, 3007, 3008, 3009, 3010] },
+  star:    { name: '星辰剑', special: true, forms: [400, 401, 402, 403, 404, 405, 406, 407, 408, 409, 410] },
+  clock:   { name: '机关剑', special: true, forms: [500, 501, 502, 503, 504, 505, 506, 507, 508, 509, 510] },
 };
 export const LANE_FORMS = { A: [2, 3], B: [4, 5], C: [6, 7] };
 export const LANE_NAMES = { A: '厚铁', B: '怒铁', C: '魔力' };
@@ -67,6 +72,11 @@ export const FORM_NAMES = {
   33: '断了也不散的剑', 45: '不想独处的剑', 34: '号令群剑之剑', 35: '厚颜无耻之剑', 36: '千剑之主', 37: '万刃君王',
   100: '枯枝', 101: '意外结实的树枝', 102: '打不断的棍子', 103: '大器晚成的棍子', 104: '萌动之种', 105: '这曾是根树枝', 106: '森林之芽', 107: '千年古树', 108: '涌泉之树', 109: '承载世界之树', 110: '世界树·尤克特拉希尔',
   200: '海带缠着的剑片', 201: '墨鱼骨小刀', 202: '蟹壳锯刃', 203: '冻金枪鱼', 204: '鱼串签', 205: '烤鱼串', 206: '河豚狼牙棒', 207: '珊瑚祭坛之刃', 208: '鲸颚之刃', 209: '克拉肯触手', 210: '利维坦之牙',
+  60: '熔岩裂纹巨剑', 61: '流淌的岩浆刃', 62: '火山之心', 63: '炎魔的獠牙', 64: '地核熔炉', 65: '焚世·赤炎王座',
+  70: '带电的铁片', 71: '雷鸣锯齿刃', 72: '风暴引雷针', 73: '雷神之锤剑', 74: '天穹裂雷', 75: '万雷·审判之矛',
+  50: '结霜的魔刃', 51: '冰晶之刃', 52: '永冻冰棱', 53: '霜巨人的獠牙', 54: '极光冰冠', 55: '绝对零度·寒渊之心',
+  400: '陨石碎片', 401: '星砂匕首', 402: '流星短剑', 403: '新月弯刀', 404: '彗尾长剑', 405: '星座之刃', 406: '星云之剑', 407: '双子星环剑', 408: '超新星', 409: '黑洞吞噬者', 410: '银河·万象之刃',
+  500: '发条小刀', 501: '齿轮匕首', 502: '弹簧剑', 503: '蒸汽活塞剑', 504: '怀表之刃', 505: '链锯巨剑', 506: '机械臂剑', 507: '钟楼之剑', 508: '蒸汽巨像之刃', 509: '永动机核心', 510: '机神·时间齿轮',
   3000: '生锈的棺材钉', 3001: '裹尸布墓刀', 3002: '掘墓人的铲子', 3003: '断裂墓碑巨剑', 3004: '棺材盖巨剑', 3005: '唤醒亡者之钟', 3006: '游魂火炬', 3007: '守墓人之镰', 3008: '拔起的坟墓', 3009: '亡者墓园', 3010: '冥界之钥',
 };
 
@@ -87,15 +97,33 @@ export function formOf(sword) {
 }
 export function familyOf(sword) {
   if (sword.family) return sword.family;
-  for (const k in FAMILIES) { const F = FAMILIES[k]; if (!F.special && F.lane === sword.lane && F.branch === sword.branch) return k; }
+  if (sword.hidden) { for (const k in FAMILIES) { const F = FAMILIES[k]; if (F.hidden && F.lane === sword.lane) return k; } }
+  for (const k in FAMILIES) { const F = FAMILIES[k]; if (!F.special && !F.hidden && F.lane === sword.lane && F.branch === sword.branch) return k; }
   return 'citadel';
 }
 /** 形态所属分组（用于图鉴） */
 export const CODEX_GROUPS = [
   { key: 'base', name: '基础', forms: [1, 38, 39] },
   { key: 'lanes', name: '投放线（+6/+8）', forms: [2, 3, 4, 5, 6, 7] },
-  ...Object.entries(FAMILIES).map(([k, f]) => ({ key: k, name: f.name + (f.special ? '（幽灵商人）' : ''), forms: f.forms })),
+  ...Object.entries(FAMILIES).map(([k, f]) => ({ key: k, name: f.name + (f.special ? '（幽灵商人）' : f.hidden ? '（隐藏家族）' : ''), forms: f.forms })),
 ];
+
+/* ========================= 材质品相 ========================= */
+// 每把剑送来时随机一种品相：改变外观，并略微提高价值
+export const VARIANTS = [
+  { id: 'plain',    name: '',     w: 80, mult: 1.0 },
+  { id: 'copper',   name: '赤铜', w: 6,  mult: 1.03, color: '#e08a5a' },
+  { id: 'frost',    name: '寒铁', w: 4,  mult: 1.06, color: '#8fd8ff' },
+  { id: 'jade',     name: '翡翠', w: 3,  mult: 1.06, color: '#7fe0a0' },
+  { id: 'obsidian', name: '黑曜', w: 3,  mult: 1.1,  color: '#c9a0ff' },
+  { id: 'blood',    name: '血钢', w: 2,  mult: 1.1,  color: '#ff6a5a' },
+  { id: 'gold',     name: '鎏金', w: 1.5, mult: 1.15, color: '#ffd36a' },
+  { id: 'holy',     name: '圣辉', w: 0.5, mult: 1.25, color: '#fff4c8' },
+];
+export const VARIANT_MAP = Object.fromEntries(VARIANTS.map(v => [v.id, v]));
+export const HIDDEN_CHANCE = 0.16;
+/** 剑等级 → 光环档位 */
+export const auraTier = lv => lv >= 18 ? 3 : lv >= 14 ? 2 : lv >= 10 ? 1 : 0;
 
 /* ========================= 遗物 ========================= */
 // rarity: common 普通 / rare 稀有 / legendary 传说；price = 剑币（剑）；day = 售货机开始出现的日子
@@ -234,6 +262,13 @@ export const ACHIEVEMENTS = [
   { id: 'm_tree', name: '世界树精通', desc: '把一把世界树剑锻造到 +20。', relic: 'eternal-seed' },
   { id: 'm_fish', name: '鱼刃精通', desc: '把一把鱼刃锻造到 +20。', relic: 'abyssal-pearl' },
   { id: 'm_funeral', name: '葬仪剑精通', desc: '把一把葬仪剑锻造到 +20。', relic: 'undertakers-ledger' },
+  { id: 'm_magma', name: '熔岩巨剑精通', desc: '把一把熔岩巨剑锻造到 +20。' },
+  { id: 'm_thunder', name: '雷霆剑精通', desc: '把一把雷霆剑锻造到 +20。' },
+  { id: 'm_frost', name: '冰霜剑精通', desc: '把一把冰霜剑锻造到 +20。' },
+  { id: 'm_star', name: '星辰剑精通', desc: '把一把星辰剑锻造到 +20。' },
+  { id: 'm_clock', name: '机关剑精通', desc: '把一把机关剑锻造到 +20。' },
+  { id: 'hidden', name: '不对劲的那一把', desc: '第一次让一把剑进入隐藏家族。' },
+  { id: 'holy_v', name: '圣光普照', desc: '得到一把圣辉品相的剑。' },
   { id: 'clear', name: '下班打卡', desc: '撑到 5 月 5 日，完成契约。', relic: 'sickle-and-hammer' },
   { id: 'broken10', name: '笨手笨脚', desc: '一局中敲碎 10 把剑。', relic: 'butterfingers' },
   { id: 'frenzy5', name: '锤不停歇', desc: '一局中进入 5 次入神。', relic: 'undying-wick' },

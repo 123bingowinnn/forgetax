@@ -8,6 +8,12 @@ const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { c
 const fmt = n => Math.round(n).toLocaleString('en-US');
 
 export const has = (st, id) => st.relics.includes(id);
+function rollVariant() {
+  const tot = D.VARIANTS.reduce((a, v) => a + v.w, 0);
+  let r = rand() * tot;
+  for (const v of D.VARIANTS) { if ((r -= v.w) < 0) return v.id; }
+  return 'plain';
+}
 export const isUnlocked = (meta, r) => !r.unlock || !!(meta && meta.ach && meta.ach[r.unlock]);
 
 /* ============================ 剑 ============================ */
@@ -17,6 +23,7 @@ export function newSword(opts = {}) {
   return {
     id: 's' + Date.now().toString(36) + (uid++), no: 0,
     lane: opts.lane || 'A', branch: opts.branch ?? (rand() < 0.5 ? 0 : 1), family: special ? opts.family : null,
+    hidden: opts.hidden ?? (rand() < D.HIDDEN_CHANCE), variant: opts.variant || rollVariant(),
     level: lv, peak: lv, base: special ? D.SPECIAL_BASE : D.BASE_VALUE, flat: 0, mult: 1,
     heated: !!opts.heated, charge: opts.charge || 0, loc: 'rack', slot: -1,
     hammers: 0, successes: 0, last: null, sameStreak: 0, succStreak: 0, holdStreak: 0,
@@ -44,9 +51,9 @@ function placeOnRack(st, s) {
 }
 
 export const formOf = s => D.formOf(s);
-export const swordName = s => D.FORM_NAMES[D.formOf(s)] || '剑';
+export const swordName = s => { const v = D.VARIANT_MAP[s.variant]; return (v && v.name ? v.name + '·' : '') + (D.FORM_NAMES[D.formOf(s)] || '剑'); };
 export function value(st, s) {
-  let v = (s.base * Math.pow(1.5, s.level) + s.flat) * s.mult;
+  let v = (s.base * Math.pow(1.5, s.level) + s.flat) * s.mult * ((D.VARIANT_MAP[s.variant] || {}).mult || 1);
   if (has(st, 'iron-signet')) v *= 1.15;
   if (has(st, 'thorn-weight')) v *= 1.1;
   if (has(st, 'black-iron-stone') && s.level >= 8) v *= 1.3;
@@ -347,6 +354,7 @@ export function hammer(st) {
     st.stats.maxLevel = Math.max(st.stats.maxLevel, s.level);
     if (s.level >= 10) ach.push('first10');
     if (s.peak >= 20) ach.push('m_' + D.familyOf(s));
+    if (s.peak >= 10 && s.hidden && !s.family) ach.push('hidden');
     recordForm(st, s);
     // 双子印
     if (has(st, 'seal-of-twins') && rand() < 0.02) {
@@ -514,7 +522,8 @@ export function rollGhost(st) {
   let basicStock = v === 1 ? 2 : v <= 3 ? 3 : v <= 7 ? 4 : 5;
   if (st.writ) basicStock += 2;
   offers.push({ kind: 'sword', id: 'basic', name: '基础剑', price: Math.max(700, Math.round(q * 0.4 / 10) * 10), stock: basicStock, bought: 0 });
-  const fam = ['tree', 'fish', 'funeral'][Math.floor(rand() * 3)];
+  const lines = ['tree', 'fish', 'funeral', 'star', 'clock'];
+  const fam = lines[Math.floor(rand() * lines.length)];
   const lvl = d < 9 ? 0 : d < 15 ? 2 : 4;
   const sp = Math.max(1100, q * 1.75 * 0.65) * (lvl === 0 ? 1 : lvl === 2 ? 1.6 : 2.4);
   offers.push({ kind: 'special', id: fam, level: lvl, name: D.FAMILIES[fam].name + '·' + D.FORM_NAMES[D.FAMILIES[fam].forms[lvl / 2]], price: Math.round(sp / 10) * 10, stock: 1, bought: 0 });

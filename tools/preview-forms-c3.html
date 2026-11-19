@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>merchant2 forms preview</title>
+<style>
+  body{margin:0;background:#16110d;overflow:hidden;font-family:"PingFang SC",sans-serif}
+  #labels div{position:absolute;color:#e8d6b8;font-size:12px;transform:translate(-50%,0);white-space:nowrap;text-shadow:0 1px 2px #000;text-align:center}
+  #err{position:absolute;left:0;top:0;color:#f66;font:12px monospace;white-space:pre;z-index:9}
+</style>
+<script type="importmap">{"imports":{"three":"../vendor/three/three.module.js","three/addons/":"../vendor/three/addons/"}}</script>
+</head><body><div id="labels"></div><div id="err"></div>
+<script>
+  window.addEventListener('error', e => { document.getElementById('err').textContent += (e.message || e) + ' @' + e.filename + ':' + e.lineno + '\n'; });
+  window.addEventListener('unhandledrejection', e => { document.getElementById('err').textContent += 'REJ ' + (e.reason && e.reason.stack || e.reason) + '\n'; });
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { FORMS } from '../src/swords/merchant2.js';
+
+const q = new URLSearchParams(location.search);
+const ids = (q.get('ids') || Object.keys(FORMS).join(',')).split(',').map(Number);
+const tilt = +(q.get('tilt') ?? 0.45);       // 从柄端方向俯视的倾角（0 = 正俯视）
+const t0 = +(q.get('t') ?? 1.0);
+const W = innerWidth, H = innerHeight;
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(W, H); renderer.setPixelRatio(1);
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.15;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x16110d);
+
+const swords = [];
+let zCursor = 0; const gap = 0.12;
+let maxLen = 0, minX = 0;
+for (const id of ids) {
+  const s = FORMS[id]();
+  const u = s.userData; let tris = 0;
+  s.traverse(o => { if (o.isMesh) { const g = o.geometry; tris += (g.index ? g.index.count : g.attributes.position.count) / 3; } });
+  const bb = new THREE.Box3().setFromObject(s);
+  s.position.z = zCursor - bb.min.z;
+  zCursor += (bb.max.z - bb.min.z) + gap;
+  maxLen = Math.max(maxLen, bb.max.x); minX = Math.min(minX, bb.min.x);
+  scene.add(s);
+  swords.push({ id, s, u, tris, bb });
+}
+const zMid = (zCursor - gap) / 2;
+for (const w of swords) w.s.position.z -= zMid;
+const spanZ = zCursor - gap + 0.1, spanX = maxLen - minX + 0.25;
+const cx = (maxLen + minX) / 2;
+const aspect = W / H;
+let halfW = spanZ / 2, halfH = halfW / aspect;
+if (spanX / 2 + 0.06 > halfH) { halfH = spanX / 2 + 0.06; halfW = halfH * aspect; }
+const cam = new THREE.OrthographicCamera(-halfW, halfW, halfH, -halfH, 0.1, 50);
+cam.up.set(1, 0, 0);
+cam.position.set(cx - Math.sin(tilt) * 10, Math.cos(tilt) * 10, 0);
+cam.lookAt(cx, 0, 0);
+cam.updateProjectionMatrix(); cam.updateMatrixWorld();
+
+scene.add(new THREE.AmbientLight(0x4a3a30, 1.0));
+scene.add(new THREE.HemisphereLight(0x8a7464, 0x140c08, 0.9));
+const key = new THREE.DirectionalLight(0xffd2a0, 2.4); key.position.set(-1, 6, -3); scene.add(key);
+const fill = new THREE.DirectionalLight(0x8ab0ff, 0.9); fill.position.set(2, 3, 5); scene.add(fill);
+const pl = new THREE.PointLight(0xffa060, 8, 0, 2); pl.position.set(cx - 1.5, 1.5, -1.5); scene.add(pl);
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, cam));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(W, H), +(q.get('bloom') ?? 0.55), 0.4, 0.82));
+composer.addPass(new OutputPass());
+
+const lab = document.getElementById('labels');
+for (const w of swords) {
+  const p = new THREE.Vector3(minX - 0.06, 0, w.s.position.z + (w.bb.max.z + w.bb.min.z) / 2).project(cam);
+  const d = document.createElement('div');
+  d.style.left = ((p.x + 1) / 2 * W) + 'px'; d.style.top = ((1 - p.y) / 2 * H) + 'px';
+  const u = w.u;
+  d.innerHTML = `<b>${w.id}</b> ${w.tris | 0}▲<br>L${u.length.toFixed(2)} b${u.bladeLength.toFixed(2)} g${u.gripLength.toFixed(2)}<br>W${u.width.toFixed(2)} T${u.thickness.toFixed(2)}`;
+  lab.appendChild(d);
+}
+function frame(t) {
+  for (const w of swords) w.u.update && w.u.update(1 / 60, t);
+  composer.render();
+}
+frame(t0);
+if (!q.has('still')) { let st = performance.now(); const loop = () => { frame(t0 + (performance.now() - st) / 1000); requestAnimationFrame(loop); }; requestAnimationFrame(loop); }
+</script>
+</body></html>

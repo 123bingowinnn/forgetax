@@ -43,132 +43,158 @@ function woodBoardTexture(w, h, base = [72, 52, 38]) {
   return tex;
 }
 
-/* ================= 锻造信息面板 ================= */
+/* ================= 锻造信息面板（对照原作 ss2 / k_11 的版式与配色） ================= */
+// 原作：深色烟熏铁板（暖灰褐），细边框，右侧两颗小方钉；奶白文字，五色结果栏与底部堆叠概率条
+const PANEL_COL = {
+  title: '#f3ede2', dim: 'rgba(236,228,214,0.86)', value: '#f1e9da',
+  break: '#ff9b80', damage: '#f2b35e', hold: '#bfe38a', success: '#a3d7f2', great: '#e2a6f6',
+  rule: { break: '#ff8a5c', damage: '#f0aa4e', hold: '#b4e07a', success: '#8fd0f0', great: '#df9cf5' },
+};
+function panelPlateTexture(w, h) {
+  const { ctx, tex } = canvasTex(w, h);
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, '#6a5b4d'); g.addColorStop(0.5, '#5a4c40'); g.addColorStop(1, '#473c33');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+  // 竖向的烟熏/拉丝条纹 + 像素颗粒（原作的面板有明显的低分辨率噪点）
+  for (let x = 0; x < w; x += 4) {
+    const k = Math.sin(x * 0.021) * 0.5 + Math.sin(x * 0.13 + 1.7) * 0.3 + (Math.random() - 0.5) * 0.6;
+    ctx.fillStyle = k > 0 ? `rgba(255,236,210,${k * 0.035})` : `rgba(0,0,0,${-k * 0.06})`;
+    ctx.fillRect(x, 0, 4, h);
+  }
+  for (let i = 0; i < 9000; i++) {
+    const s = 3 + (Math.random() * 2 | 0) * 2;
+    ctx.fillStyle = Math.random() < 0.5 ? `rgba(0,0,0,${Math.random() * 0.05})` : `rgba(255,230,200,${Math.random() * 0.025})`;
+    ctx.fillRect((Math.random() * w / s | 0) * s, (Math.random() * h / s | 0) * s, s, s);
+  }
+  // 内侧暗角，让文字区更沉
+  const v = ctx.createRadialGradient(w * 0.55, h * 0.45, h * 0.2, w * 0.55, h * 0.5, w * 0.7);
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.28)');
+  ctx.fillStyle = v; ctx.fillRect(0, 0, w, h);
+  // 细边：上沿亮线、下沿暗线
+  ctx.fillStyle = 'rgba(255,235,205,0.16)'; ctx.fillRect(0, 0, w, 3);
+  ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(0, h - 4, w, 4);
+  return tex;
+}
+
 export class InfoPanel {
   constructor() {
-    this.W = 1.18; this.H = 0.66;
+    this.W = 1.26; this.H = 0.58;
     this.group = new THREE.Group();
-    const wood = new THREE.MeshStandardMaterial({ map: woodBoardTexture(512, 288), roughness: 0.9, metalness: 0.05 });
-    const edge = new THREE.MeshStandardMaterial({ color: 0x2a1f18, roughness: 0.9 });
-    const board = new THREE.Mesh(new THREE.BoxGeometry(this.W, this.H, 0.035), [edge, edge, edge, edge, wood, edge]);
-    this.group.add(board);
-    // 右上、右下的小铁钉
-    const nailM = new THREE.MeshStandardMaterial({ color: 0xd8d0c0, roughness: 0.5, metalness: 0.6 });
-    [[this.W / 2 - 0.02, this.H / 2 - 0.03], [this.W / 2 - 0.02, -this.H / 2 + 0.03]].forEach(([x, y]) => {
-      const n = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.018, 0.01), nailM);
-      n.position.set(x, y, 0.022); this.group.add(n);
+    const face = new THREE.MeshStandardMaterial({ map: panelPlateTexture(768, 354), roughness: 0.7, metalness: 0.1, color: 0xffffff, emissive: 0x1e1814, emissiveIntensity: 1 });
+    const edge = new THREE.MeshStandardMaterial({ color: 0x1f1a16, roughness: 0.85, metalness: 0.2 });
+    // 板体 + 背后略大的深色衬板（原作面板有一圈突出的暗色边）
+    const back = new THREE.Mesh(new THREE.BoxGeometry(this.W + 0.04, this.H + 0.035, 0.02), edge);
+    back.position.z = -0.012;
+    const board = new THREE.Mesh(new THREE.BoxGeometry(this.W, this.H, 0.03), [edge, edge, edge, edge, face, edge]);
+    this.group.add(back, board);
+    // 右侧上下两颗浅色方钉
+    const nailM = new THREE.MeshStandardMaterial({ color: 0xe8e0d0, roughness: 0.45, metalness: 0.3, emissive: 0x2a2620 });
+    [[this.W / 2 + 0.006, this.H / 2 - 0.02], [this.W / 2 + 0.006, -this.H / 2 + 0.02]].forEach(([x, y]) => {
+      const n = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 0.012), nailM);
+      n.position.set(x, y, 0.016); this.group.add(n);
     });
-    this.text = textPlane(this.W, this.H, 1536, 860, 1.0);
-    this.text.mesh.position.z = 0.019;
+    // 挂杆（面板上方的两根细铁杆，接到墙上）
+    const rod = new THREE.MeshStandardMaterial({ color: 0x2b2622, roughness: 0.7, metalness: 0.3 });
+    [-0.4, 0.4].forEach(x => { const r = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.012, 0.06), rod); r.position.set(x * this.W, this.H / 2 - 0.03, -0.04); this.group.add(r); });
+    this.text = textPlane(this.W, this.H, 2048, 944, 1.0);
+    this.text.mesh.position.z = 0.0165;
     this.group.add(this.text.mesh);
     this.key = '';
   }
 
-  /** vm: { name, level, value, last:{outcome,levelDelta,delta,ratio}|null, charge, frenzy:{t}|null, probs, empty, tags:[] } */
+  /** vm: { name, level, value, last:{outcome,levelDelta,delta,ratio}|null, charge, frenzy:{t,frac}|null, probs, empty, tags:[] } */
   draw(vm) {
     const key = JSON.stringify(vm);
     if (key === this.key) return;
     this.key = key;
     const { ctx, canvas, tex } = this.text;
     const W = canvas.width, H = canvas.height;
+    const P = PANEL_COL;
     ctx.clearRect(0, 0, W, H);
-    const L = 92, R = W - 92;
+    const L = W * 0.078, R = W * 0.948;
+    const Y = f => H * f;
     ctx.textBaseline = 'alphabetic';
+    const soft = (c = 'rgba(0,0,0,0.5)', b = 6) => { ctx.shadowColor = c; ctx.shadowBlur = b; ctx.shadowOffsetY = 2; };
+    const glow = (c, b = 14) => { ctx.shadowColor = c; ctx.shadowBlur = b; ctx.shadowOffsetY = 0; };
+    soft();
     ctx.textAlign = 'left';
-    const shadow = (b = 10) => { ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = b; ctx.shadowOffsetY = 3; };
-    shadow();
     if (vm.empty) {
-      ctx.fillStyle = 'rgba(240,228,210,0.9)';
-      ctx.font = `600 84px ${FONT}`;
-      ctx.fillText('铁砧空着', L, 170);
-      ctx.font = `400 40px ${FONT}`;
-      ctx.fillStyle = 'rgba(220,200,180,0.75)';
-      ctx.fillText('把一把剑放上铁砧开始锻造', L, 250);
-      tex.needsUpdate = true;
-      return;
+      ctx.fillStyle = P.title; ctx.font = `600 ${Y(0.12)}px ${FONT}`;
+      ctx.fillText('铁砧空着', L, Y(0.24));
+      ctx.fillStyle = P.dim; ctx.font = `500 ${Y(0.05)}px ${FONT}`;
+      ctx.fillText('拿一把烧热的剑放上来', L, Y(0.36));
+      tex.needsUpdate = true; return;
     }
-    // 名称 + 等级
-    ctx.fillStyle = '#f7efe4';
-    ctx.font = `600 90px ${FONT}`;
+    // 第一行：名字 / 等级
+    ctx.fillStyle = P.title;
+    ctx.font = `600 ${Y(0.118)}px ${FONT}`;
     let name = vm.name;
-    while (ctx.measureText(name).width > W - 420 && name.length > 2) name = name.slice(0, -1);
-    ctx.fillText(name, L, 165);
+    while (ctx.measureText(name).width > (R - L) * 0.72 && name.length > 2) name = name.slice(0, -1);
+    ctx.fillText(name, L, Y(0.215));
     ctx.textAlign = 'right';
-    ctx.font = `600 92px ${FONT}`;
-    ctx.fillText('+' + vm.level, R, 165);
-    // 上贡价值
+    ctx.font = `600 ${Y(0.125)}px ${FONT}`;
+    ctx.fillText('+' + vm.level, R, Y(0.215));
+    // 第二行：上贡价值 / 数值
     ctx.textAlign = 'left';
-    ctx.font = `500 34px ${FONT}`;
-    ctx.fillStyle = 'rgba(240,225,205,0.85)';
-    ctx.fillText('上贡价值', L, 262);
+    ctx.fillStyle = P.dim; ctx.font = `600 ${Y(0.042)}px ${FONT}`;
+    ctx.fillText('上贡价值', L + 4, Y(0.355));
     ctx.textAlign = 'right';
-    ctx.font = `600 104px ${FONT}`;
-    ctx.fillStyle = '#f7efe4';
-    ctx.fillText(fmt(vm.value) + ' G', R, 290);
-    // 结果行
+    ctx.fillStyle = P.value; ctx.font = `600 ${Y(0.15)}px ${FONT}`;
+    ctx.fillText(fmt(vm.value) + ' G', R, Y(0.405));
+    // 第三行：上一锤结果
     ctx.textAlign = 'left';
     if (vm.last) {
       const o = OUTCOMES[vm.last.outcome];
-      ctx.fillStyle = o.color;
-      ctx.font = `600 46px ${FONT}`;
-      const lv = vm.last.levelDelta > 0 ? '  +' + vm.last.levelDelta : (vm.last.levelDelta < 0 ? '  ' + vm.last.levelDelta : '');
-      ctx.fillText(o.name + lv, L, 368);
-      ctx.font = `500 32px ${FONT}`;
-      ctx.fillStyle = 'rgba(240,225,205,0.85)';
+      const c = P[vm.last.outcome];
+      glow(c, 4); ctx.fillStyle = c; ctx.font = `600 ${Y(0.064)}px ${FONT}`;
+      const lv = vm.last.levelDelta > 0 ? '   +' + vm.last.levelDelta : (vm.last.levelDelta < 0 ? '   ' + vm.last.levelDelta : '');
+      ctx.fillText(o.name + lv, L + 4, Y(0.53));
+      soft(); ctx.fillStyle = P.dim; ctx.font = `500 ${Y(0.042)}px ${FONT}`;
       const r = vm.last.ratio;
       const rs = r >= 10 ? r.toFixed(0) : r.toFixed(2).replace(/\.?0+$/, '');
-      ctx.fillText((vm.last.delta >= 0 ? '+' : '') + fmt(vm.last.delta) + ' G   ·   ' + rs + '倍', L + 4, 418);
+      ctx.fillText((vm.last.delta >= 0 ? '+' : '') + fmt(vm.last.delta) + ' G   ·   ' + rs + '倍', L + 10, Y(0.6));
+    } else if (vm.tags && vm.tags.length) {
+      ctx.fillStyle = P.dim; ctx.font = `500 ${Y(0.042)}px ${FONT}`;
+      ctx.fillText(vm.tags.join('   '), L + 6, Y(0.56));
     }
-    if (vm.tags && vm.tags.length) {
-      ctx.font = `500 28px ${FONT}`;
-      ctx.fillStyle = 'rgba(190,240,170,0.9)';
-      ctx.fillText(vm.tags.join('   '), L + 4, vm.last ? 458 : 400);
-    }
-    // 充能刻度
-    const pipW = 34, gap = 14, n = 10;
-    const px0 = R - n * pipW - (n - 1) * gap;
+    // 充能：10 个小方块 + "n / 10"
+    const n = 10, pw = Y(0.038), gap = Y(0.034);
+    const px0 = R - n * pw - (n - 1) * gap - Y(0.02);
     ctx.textAlign = 'right';
-    ctx.font = `600 36px ${FONT}`;
-    ctx.fillStyle = 'rgba(240,225,205,0.92)';
-    if (vm.frenzy) {
-      ctx.fillStyle = '#b8ff9a';
-      ctx.fillText(vm.frenzy.t.toFixed(1) + 's', R, 362);
-    } else {
-      ctx.fillText(vm.charge + ' / 10', R, 362);
-    }
+    ctx.font = `600 ${Y(0.046)}px ${FONT}`;
+    if (vm.frenzy) { glow('rgba(160,255,140,0.9)', 12); ctx.fillStyle = '#c4ffb0'; ctx.fillText('入神 ' + vm.frenzy.t.toFixed(1) + 's', R - Y(0.02), Y(0.53)); }
+    else { ctx.fillStyle = P.dim; ctx.fillText(vm.charge + ' / 10', R - Y(0.02), Y(0.53)); }
     for (let i = 0; i < n; i++) {
       const on = vm.frenzy ? (i < Math.ceil(vm.frenzy.frac * 10)) : i < vm.charge;
-      const x = px0 + i * (pipW + gap), y = 392;
-      ctx.shadowBlur = on ? 18 : 0;
-      ctx.shadowColor = vm.frenzy ? 'rgba(160,255,120,0.9)' : 'rgba(255,190,90,0.9)';
-      ctx.fillStyle = on ? (vm.frenzy ? '#c8ffb0' : '#ffe2a6') : 'rgba(30,22,16,0.75)';
-      ctx.fillRect(x, y, pipW, pipW * 0.72);
+      const x = px0 + i * (pw + gap), y = Y(0.575);
+      if (on) { glow(vm.frenzy ? 'rgba(150,255,130,1)' : 'rgba(255,190,100,1)', 18); ctx.fillStyle = vm.frenzy ? '#d6ffc6' : '#fff0c8'; }
+      else { ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(20,16,13,0.85)'; }
+      ctx.fillRect(x, y, pw, pw * 0.82);
+      if (!on) { ctx.fillStyle = 'rgba(255,230,200,0.10)'; ctx.fillRect(x, y, pw, 2); }
     }
-    shadow();
-    // 五种结果
+    // 五种结果：彩色细线 + 名称 + 概率
     const colW = (R - L) / 5;
     OUTCOME_ORDER.forEach((k, i) => {
       const o = OUTCOMES[k];
-      const x0 = L + i * colW + 10, x1 = L + (i + 1) * colW - 10, cx = (x0 + x1) / 2;
-      ctx.shadowBlur = 12; ctx.shadowColor = o.color;
-      ctx.fillStyle = o.color;
-      ctx.fillRect(x0, 498, x1 - x0, 5);
-      ctx.shadowBlur = 8; ctx.shadowColor = 'rgba(0,0,0,0.5)';
-      ctx.textAlign = 'center';
-      ctx.font = `600 36px ${FONT}`;
-      ctx.fillText(o.name, cx, 560);
-      ctx.font = `500 50px ${FONT}`;
-      ctx.fillText((vm.probs[k] * 100).toFixed(1) + '%', cx, 630);
+      const x0 = L + i * colW + colW * 0.04, x1 = L + (i + 1) * colW - colW * 0.06, cx = (x0 + x1) / 2;
+      glow(P.rule[k], 6); ctx.fillStyle = P.rule[k];
+      ctx.fillRect(x0, Y(0.655), x1 - x0, Y(0.0065));
+      soft('rgba(0,0,0,0.45)', 4);
+      ctx.textAlign = 'center'; ctx.fillStyle = P[k];
+      ctx.font = `600 ${Y(0.05)}px ${FONT}`;
+      ctx.fillText(o.name, cx, Y(0.735));
+      ctx.font = `600 ${Y(0.064)}px ${FONT}`;
+      ctx.fillText((vm.probs[k] * 100).toFixed(1) + '%', cx, Y(0.825));
     });
-    // 底部概率条
+    // 底部堆叠概率条
     let x = L;
-    const y = 700, bw = R - L;
+    const bw = R - L, by = Y(0.905), bh = Y(0.0075);
+    ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(L, by, bw, bh);
     OUTCOME_ORDER.forEach(k => {
       const w = vm.probs[k] * bw;
-      if (w <= 0) return;
-      ctx.shadowBlur = 16; ctx.shadowColor = OUTCOMES[k].color;
-      ctx.fillStyle = OUTCOMES[k].color;
-      ctx.fillRect(x, y, w, 9);
+      if (w <= 0.5) return;
+      glow(P.rule[k], 12); ctx.fillStyle = P.rule[k];
+      ctx.fillRect(x, by, w, bh);
       x += w;
     });
     ctx.shadowBlur = 0;

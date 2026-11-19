@@ -30,6 +30,7 @@ export function buildWorld(scene) {
   const W = { colliders: [], updaters: [], interactables: [] };
   const M = TX.makeMaterials ? TX.makeMaterials() : {};
   const brick = M.brick || new THREE.MeshStandardMaterial({ color: 0x6b4630, roughness: 0.95 });
+  if (M.brick) { brick.color.multiply(new THREE.Color(0.62, 0.56, 0.53)); }   // 原作砖墙更灰褐、不那么橙
   const stone = M.stone || new THREE.MeshStandardMaterial({ color: 0x55584f, roughness: 0.95 });
   const floor = M.floor || new THREE.MeshStandardMaterial({ color: 0x2a2826, roughness: 0.95 });
   const wood = M.wood || new THREE.MeshStandardMaterial({ color: 0x3a2a20, roughness: 0.9 });
@@ -119,20 +120,22 @@ export function buildWorld(scene) {
   tagInteract(hammer, { kind: 'anvil' });
 
   const panel = new InfoPanel();
-  panel.group.position.set(-0.22, 1.72, z1 - 0.05);
+  // 原作：锻造面板挂得很低、很大，就在铁砧正上方，锻造时占据画面上半部分
+  panel.group.position.set(-0.18, 1.5, z1 - 0.05);
+  panel.group.scale.setScalar(1.32);
   panel.group.rotation.y = Math.PI;
   scene.add(panel.group);
   W.panel = panel;
 
   const cal = new Calendar();
-  cal.group.position.set(0.98, 1.78, z1 - 0.03);
+  cal.group.position.set(1.12, 1.62, z1 - 0.03);
   cal.group.rotation.set(0, Math.PI, 0.03);
   scene.add(cal.group);
   W.calendar = cal;
   tagInteract(cal.group, { kind: 'calendar' });
 
   const star = call(P.buildWallStar);
-  star.position.set(-0.1, 2.6, z1 - 0.12); star.rotation.y = Math.PI; scene.add(star);
+  star.position.set(-0.1, 2.65, z1 - 0.12); star.rotation.y = Math.PI; scene.add(star);
 
   /* ---------- 西墙：熔炉 + 幽灵商人站位 ---------- */
   const furnace = call(P.buildFurnace);

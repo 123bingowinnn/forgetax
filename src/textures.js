@@ -72,7 +72,7 @@ function blotches(ctx, w, h, n, seed, alpha = 0.12, dark = true) {
   }
 }
 
-function finish(c, key, { nearest = true, color = true } = {}) {
+function finish(c, key, { nearest = false, color = true } = {}) {
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   if (color) t.colorSpace = THREE.SRGBColorSpace;
@@ -92,10 +92,10 @@ function cached(key, fn) {
 
 // ---------- 砖墙 ----------
 function drawBrick(bump) {
-  const W = 512, H = 512, cols = 4, rows = 8;
+  const W = 1024, H = 1024, cols = 4, rows = 8;
   const c = canvas(W, H), g = c.getContext('2d');
   const r = rng(1234);
-  const bw = W / cols, bh = H / rows, m = 5; // 砖缝宽度(px)
+  const bw = W / cols, bh = H / rows, m = 16; // 砖缝宽度(px)
   g.fillStyle = bump ? '#000' : '#1b120c';
   g.fillRect(0, 0, W, H);
   const base = [106, 86, 72];
@@ -105,29 +105,33 @@ function drawBrick(bump) {
       const x0 = col * bw + off + m / 2, y0 = row * bh + m / 2;
       const w = bw - m, h = bh - m;
       if (bump) {
-        g.fillStyle = '#bbb'; g.fillRect(x0, y0, w, h);
-        g.fillStyle = '#fff'; g.fillRect(x0 + 3, y0 + 3, w - 6, h - 6);
+        g.fillStyle = '#888'; g.fillRect(x0, y0, w, h);
+        g.fillStyle = '#ccc'; g.fillRect(x0 + 4, y0 + 4, w - 8, h - 8);
+        g.fillStyle = '#fff'; g.fillRect(x0 + 9, y0 + 9, w - 18, h - 18);
         continue;
       }
-      const k = 0.78 + r() * 0.4;
+      const k = 0.82 + r() * 0.3;
       const tint = mix(base, [100, 76, 62], r() * 0.7);
-      g.fillStyle = shade(tint, k); g.fillRect(x0, y0, w, h);
-      // 低多边形倒角：上亮下暗
-      g.fillStyle = shade(tint, k * 1.18); g.fillRect(x0, y0, w, 4);
-      g.fillStyle = shade(tint, k * 1.08); g.fillRect(x0, y0, 4, h);
-      g.fillStyle = shade(tint, k * 0.68); g.fillRect(x0, y0 + h - 5, w, 5);
-      g.fillStyle = shade(tint, k * 0.8); g.fillRect(x0 + w - 4, y0, 4, h);
-      // 偶尔的剥落/灰浆斑（k_9 那种浅色块）
-      if (r() < 0.12) {
-        g.fillStyle = shade([150, 120, 95], 0.9 + r() * 0.2);
+      // 平滑的砖面：中间略亮、四周倒角渐暗（原作的砖有柔和的圆角与阴影）
+      const gr = g.createLinearGradient(x0, y0, x0, y0 + h);
+      gr.addColorStop(0, shade(tint, k * 1.25)); gr.addColorStop(0.12, shade(tint, k * 1.05));
+      gr.addColorStop(0.7, shade(tint, k * 0.88)); gr.addColorStop(1, shade(tint, k * 0.5));
+      g.fillStyle = gr; g.fillRect(x0, y0, w, h);
+      const gx = g.createLinearGradient(x0, 0, x0 + w, 0);
+      gx.addColorStop(0, 'rgba(255,240,220,0.06)'); gx.addColorStop(0.06, 'rgba(0,0,0,0)'); gx.addColorStop(0.94, 'rgba(0,0,0,0)'); gx.addColorStop(1, 'rgba(0,0,0,0.28)');
+      g.fillStyle = gx; g.fillRect(x0, y0, w, h);
+      // 砖面上的细微斑点
+      for (let k2 = 0; k2 < 40; k2++) { g.fillStyle = `rgba(0,0,0,${r() * 0.08})`; g.fillRect(x0 + r() * w, y0 + r() * h, 2 + r() * 6, 2 + r() * 4); }
+      if (r() < 0.1) {
+        g.fillStyle = `rgba(160,130,105,${0.25 + r() * 0.2})`;
         const px = x0 + r() * w * 0.6, py = y0 + r() * h * 0.4;
-        for (let k2 = 0; k2 < 6; k2++) g.fillRect(px + (r() - 0.3) * 20, py + (r() - 0.3) * 14, 6 + r() * 16, 4 + r() * 10);
+        for (let k2 = 0; k2 < 5; k2++) g.fillRect(px + (r() - 0.3) * 30, py + (r() - 0.3) * 20, 10 + r() * 26, 6 + r() * 14);
       }
     }
   }
   if (!bump) {
-    blotches(g, W, H, 40, 99, 0.18);
-    grain(g, W, H, 0.12, 2, 5);
+    blotches(g, W, H, 60, 99, 0.16);
+    grain(g, W, H, 0.07, 2, 5);
   }
   return c;
 }

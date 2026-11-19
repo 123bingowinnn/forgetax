@@ -59,6 +59,15 @@ export class Sparks {
     });
   }
 
+  /** 灰尘：极慢的漂浮微粒，暗淡的暖白色 */
+  mote(at) {
+    if (this.p.length >= MAX - 200) return;
+    const c = new THREE.Color(0xffe2b8).multiplyScalar(0.18 + Math.random() * 0.22);
+    const o = { x: at.x, y: at.y, z: at.z, vx: (Math.random() - 0.5) * 0.04, vy: (Math.random() - 0.4) * 0.03, vz: (Math.random() - 0.5) * 0.04,
+      life: 0, l0: 4 + Math.random() * 5, max: 9, c, s: 0.004 + Math.random() * 0.004, g: 0, drag: 1, floor: -10, dust: true };
+    o.life = o.l0; this.p.push(o);
+  }
+
   update(dt) {
     const arr = this.p;
     for (let i = arr.length - 1; i >= 0; i--) {
@@ -73,7 +82,8 @@ export class Sparks {
     const n = arr.length;
     for (let i = 0; i < n; i++) {
       const q = arr[i];
-      const k = Math.min(1, q.life / 0.4);
+      const k = q.dust ? Math.max(0, Math.min(1, q.life / 1.5, (q.l0 - q.life) / 1.5)) * 0.55 : Math.min(1, q.life / 0.4);
+      if (q.dust) { q.x += Math.sin(q.life * 0.7 + i) * 0.0006; }
       this.pos[i * 3] = q.x; this.pos[i * 3 + 1] = q.y; this.pos[i * 3 + 2] = q.z;
       this.col[i * 3] = q.c.r * k; this.col[i * 3 + 1] = q.c.g * k; this.col[i * 3 + 2] = q.c.b * k;
       this.size[i] = q.s;

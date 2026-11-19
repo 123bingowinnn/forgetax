@@ -22,8 +22,10 @@ function setup() {
 function anvil(st, level, frenzy) {
   const s = st.swords[0];
   s.level = level; s.peak = level; s.heated = true; s.loc = 'hand';
-  if (P.get('form')) { const f = +P.get('form'); for (const k in F.D.FAMILIES) { const i = F.D.FAMILIES[k].forms.indexOf(f); if (i >= 0) { if (F.D.FAMILIES[k].special) { s.family = k; } else { s.lane = F.D.FAMILIES[k].lane; s.branch = F.D.FAMILIES[k].branch; } } } }
+  if (P.get('form')) { const f = +P.get('form'); for (const k in F.D.FAMILIES) { const i = F.D.FAMILIES[k].forms.indexOf(f); if (i >= 0) { if (F.D.FAMILIES[k].special) { s.family = k; } else { s.lane = F.D.FAMILIES[k].lane; s.branch = F.D.FAMILIES[k].branch; s.hidden = !!F.D.FAMILIES[k].hidden; } } } }
   if (P.get('lane')) s.lane = P.get('lane');
+  if (P.get('variant')) s.variant = P.get('variant');
+  if (P.get('hidden')) s.hidden = true;
   G.putOnAnvil(st);
   if (frenzy) { st.frenzy = { active: true, timeLeft: 3.2, swordId: s.id, presses: 0 }; }
   st.lastResult = { outcome: 'success', levelDelta: 1, delta: 1234, ratio: 1.5, swordId: s.id };
@@ -122,10 +124,11 @@ try {
       log.push('turned=' + (F.player.yaw - yaw0).toFixed(2));
       // 点按剑架上的剑 → 拿起
       const sw = G.rackSwords(st)[0]; const wp = new F.THREE.Vector3(); F.swordObj(sw.id).getWorldPosition(wp); wp.y += 0.15;
-      F.tp(2.2, wp.z); F.lookAt(wp.x, wp.y, wp.z); F.step(2);
+      F.tp(-0.5, 0.2); F.lookAt(wp.x, wp.y, wp.z); F.step(2);   // 远距离点按：应自动走过去再拿
       const v = wp.clone().project(F.camera); const sx = (v.x + 1) / 2 * innerWidth, sy = (1 - v.y) / 2 * innerHeight;
-      pe(zLook, 'pointerdown', sx, sy, 3); pe(zLook, 'pointerup', sx, sy, 3);
-      log.push('tapPick=' + !!G.handSword(st));
+      pe(zLook, 'pointerdown', sx + 14, sy + 10, 3); pe(zLook, 'pointerup', sx + 14, sy + 10, 3);
+      F.step(60, 1 / 30);
+      log.push('tapPick=' + !!G.handSword(st) + ' at=' + F.player.pos.x.toFixed(2) + ',' + F.player.pos.z.toFixed(2));
       // 交互按钮：对准熔炉后点「交互」
       F.tp(-2.2, 1.45); F.lookAt(-3.4, 0.95, 1.45); F.step(2);
       const act = document.getElementById('tbAct'); log.push('actLabel=' + act.textContent.trim() + ' phase=' + F.phase + ' tgt=' + (F.findTarget() && F.findTarget().data.kind) + ' pos=' + F.player.pos.x.toFixed(2) + ',' + F.player.pos.z.toFixed(2) + ' mode=' + F.player.mode + ' info=' + JSON.stringify(F.target && F.target.info && F.target.info.act) + ' modal=' + !document.getElementById('modal').classList.contains('hidden'));
